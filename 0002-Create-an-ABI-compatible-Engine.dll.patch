@@ -1,0 +1,25 @@
+From 48b17c557fe3dc34844d5ecbed4b1dbedb292755 Mon Sep 17 00:00:00 2001
+From: Alde Rojas <hello@alde.dev>
+Date: Wed, 27 Sep 2023 00:06:27 -0500
+Subject: [PATCH] Create an ABI compatible Engine.dll
+
+---
+ Engine/Src/Engine.vcproj | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Engine/Src/Engine.vcproj b/Engine/Src/Engine.vcproj
+index 5e9b1c1..30ac8eb 100644
+--- a/Engine/Src/Engine.vcproj
++++ b/Engine/Src/Engine.vcproj
+@@ -112,7 +112,7 @@
+ 				OmitFramePointers="TRUE"
+ 				OptimizeForProcessor="2"
+ 				AdditionalIncludeDirectories="..\..\Core\Inc;..\Inc;..\..\metoolkit\include;..\..\IFC\Inc"
+-				PreprocessorDefinitions="ENGINE_API=__declspec(dllexport);_WINDOWS;NDEBUG;WIN32;UNICODE;DO_GUARD=1;DO_GUARD_SLOW=0;DO_CHECK=1;DO_CHECK_SLOW=0;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
++				PreprocessorDefinitions="ENGINE_API=__declspec(dllexport);_WINDOWS;NDEBUG;WIN32;UNICODE;DO_GUARD=1;DO_GUARD_SLOW=0;DO_CHECK=1;DO_CHECK_SLOW=0;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0;WITH_LIPSINC"
+ 				StringPooling="TRUE"
+ 				BasicRuntimeChecks="0"
+ 				RuntimeLibrary="2"
+-- 
+2.42.0.windows.2
+

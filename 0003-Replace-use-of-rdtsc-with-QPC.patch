@@ -1,0 +1,123 @@
+From a395df44ad65de832576f0cb44854c71c316a164 Mon Sep 17 00:00:00 2001
+From: Alde Rojas <hello@alde.dev>
+Date: Wed, 27 Sep 2023 02:41:14 -0500
+Subject: [PATCH] Replace use of rdtsc with QPC
+
+The rdtsc timer is not a reliable timer, so replace it with QPC
+timers. Fortunately, `appCycles()` is limited to stats collection.
+However, the function was defined in a header and thus requires us
+to recompile every binary that used it.
+---
+ Core/Inc/UnVcWin32.h   | 12 ---------
+ Core/Src/UnVcWin32.cpp | 55 ++++++++++++------------------------------
+ 2 files changed, 16 insertions(+), 51 deletions(-)
+
+diff --git a/Core/Inc/UnVcWin32.h b/Core/Inc/UnVcWin32.h
+index 3b4b229..aab209e 100644
+--- a/Core/Inc/UnVcWin32.h
++++ b/Core/Inc/UnVcWin32.h
+@@ -293,18 +293,6 @@ FORCEINLINE QWORD __rdtsc(void)
+ }
+ #endif
+ 
+-extern CORE_API QWORD GBaseCycles;
+-#define DEFINED_appResetTimer 1
+-inline void appResetTimer(void)
+-{
+-    GBaseCycles = __rdtsc();
+-}
+-
+-#define DEFINED_appCycles 1
+-FORCEINLINE DWORD appCycles(void)
+-{
+-    return((DWORD) (__rdtsc() & 0xFFFFFFFF));
+-}
+ 
+ // Intel SpeedStep and AMD Cool & Quiet CPUs automatically adjust their frequency so RDTSC 
+ // shouldn't be used for game relevant inter- frame timing. The code will default to using
+diff --git a/Core/Src/UnVcWin32.cpp b/Core/Src/UnVcWin32.cpp
+index d5c371e..38c72f1 100644
+--- a/Core/Src/UnVcWin32.cpp
++++ b/Core/Src/UnVcWin32.cpp
+@@ -749,6 +749,16 @@ static LONGLONG __QueryPerformanceFrequency() {
+ LONGLONG GTimerBaseCounter;
+ LONGLONG GTimerFrequency;
+ 
++//
++// Reset the timer.
++//
++#if !DEFINED_appResetTimer
++CORE_API void appResetTimer(void)
++{
++    GBaseCycles = __QueryPerformanceCounter();
++}
++#endif
++
+ //
+ // Get time in seconds. Origin is arbitrary.
+ //
+@@ -766,7 +776,7 @@ CORE_API DOUBLE appSeconds()
+ #if !DEFINED_appCycles
+ CORE_API DWORD appCycles()
+ {
+-	return appSeconds();
++	return((DWORD)(__QueryPerformanceCounter() & 0xFFFFFFFF));
+ }
+ #endif
+ 
+@@ -1451,47 +1461,14 @@ void appPlatformInit()
+ 	// CPU speed.
+ 	guard(CheckCpuSpeed);
+ 	FLOAT CpuSpeed;
+-	try
+-	{
+-		GSecondsPerCycle = 1.f;
+ 
+-		for( INT i=0; i<3; i++ )
+-		{
+-			QWORD StartCycles, EndCycles;
+-			volatile DOUBLE	DoubleDummy = 0.0;
+-			volatile INT	IntDummy	= 0;
++	GSecondsPerCycle = 1.0f / (DOUBLE)__QueryPerformanceFrequency();
++	GTimerFrequency = __QueryPerformanceFrequency();
++	GTimerBaseCounter = __QueryPerformanceCounter();
+ 
+-			StartCycles = __rdtsc();
++	debugf( NAME_Init, TEXT("Timer Frequency=%f MHz"), 0.000001 *  GTimerFrequency );
++	appStrcat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), appRound(0.000001 / GSecondsPerCycle) ) ); // gam
+ 
+-			DWORD	StartMsec	= timeGetTime(),
+-					EndMsec		= StartMsec;
+-			while( EndMsec-StartMsec < 200 )
+-			{
+-				DoubleDummy += appSqrt(DoubleDummy) + 3.14;
+-				IntDummy	*= ((INT) (DoubleDummy) + 555) / 13;
+-				EndMsec = timeGetTime();
+-			}
+-			
+-			EndCycles = __rdtsc();
+-
+-			DOUBLE	C1	= (DOUBLE)(SQWORD) StartCycles;
+-			DOUBLE	C2	= (DOUBLE)(SQWORD) EndCycles;
+-
+-			GSecondsPerCycle = Min( GSecondsPerCycle, 1.0 / (1000.f * ( C2 - C1 ) / (EndMsec - StartMsec)) );
+-		}
+-
+-		GTimerFrequency = __QueryPerformanceFrequency();
+-		GTimerBaseCounter = __QueryPerformanceCounter();
+-
+-		debugf( NAME_Init, TEXT("CPU Speed=%f MHz, Timer Frequency=%f MHz"), 0.000001 / GSecondsPerCycle, 0.000001 *  GTimerFrequency );
+-        appStrcat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), appRound(0.000001 / GSecondsPerCycle) ) ); // gam
+-	}
+-	catch( ... )
+-	{
+-		debugf( NAME_Init, TEXT("Timestamp not supported (Possibly 486 or Cyrix processor)") );
+-        appStrcat( GMachineCPU, TEXT(" Unknown clock") ); // gam
+-		GSecondsPerCycle = 1;
+-	}
+ 	if( Parse(appCmdLine(),TEXT("CPUSPEED="),CpuSpeed) )
+ 	{
+ 		GSecondsPerCycle = 0.000001/CpuSpeed;
+-- 
+2.42.0.windows.2
+
