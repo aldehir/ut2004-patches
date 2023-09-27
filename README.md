@@ -19,15 +19,17 @@ patches to fully patch your UT2004 installation.
 
 ### v3369.1
 
-* Add support for framerates that require higher resolution than 1ms.
+* **Add support for framerates that require higher resolution than 1ms.**
+
   UT2004's original timers caused framerates to vary wildly due to their low
   resolution. Now you can maintain any desired framerate.
 
-* Fix the framerate limiting algorithm. UT2004 performed additional operations
-  after limiting your framerate, resulting in a reported framerate less than
-  MaxClientFrameRate. The limit is now applied after those operations to
-  provide a more stable fps.
+* **Fix the framerate limiting algorithm.**
 
-  * NOTE: You may notice that single player no longer hits up to 1000 fps. This
-    was a misleading metric, as it only occurs when there are no OS events to
-    process. The counter now reports an accurate fps.
+  UT2004 performed additional operations after limiting your framerate,
+  resulting in a reported framerate less than MaxClientFrameRate. The limit is
+  now applied after those operations to provide a more stable fps.
+
+  NOTE: You may notice that single player no longer hits up to 1000 fps. This
+  was a misleading metric, as it only occurs when there are no OS events to
+  process. The counter now reports an accurate fps.
