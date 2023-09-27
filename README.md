@@ -8,12 +8,20 @@ contain the entire UT2004 source code. It only contains patch files to apply
 the changes on top of the original UT2004 v3369 source.
 
 
-## Patches
+## Changelog
 
-* Replace `timeGetTime()` usage with the higher resolution timer
-  `QueryPerformanceCounter()`.
-* Replace usage of `rdtsc` with `QueryPerformanceCounter()`.
-* Fix the Engine's framerate limiting mechanism.
+* Add support for framerates that require higher resolution than 1ms.
+  UT2004's original timers caused framerates to vary wildly due to their low
+  resolution. Now you can maintain any desired framerate.
+
+* Fix the framerate limiting algorithm. UT2004 performed additional operations
+  after limiting your framerate, resulting in a reported framerate less than
+  MaxClientFrameRate. The limit is now applied after those operations,
+  providing a more stable FPS.
+
+  * NOTE: You may notice that single player no longer hits up to 1000 fps. This
+    was a misleading framerate to begin with, as it only occurs when there are
+    no OS events to process. The counter now reports an accurate fps.
 
 
 ## Installation
