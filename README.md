@@ -10,8 +10,9 @@ the changes on top of the original UT2004 v3369 source.
 
 ## Installation
 
-Releases contain the entirety of changes made in this repository.  Download the
-latest release and install directly on top of your UT2004 installation.
+Download the latest release and install directly on top of your UT2004
+installation. Every release is standalone, you do not need to apply previous
+patches to fully patch your UT2004 installation.
 
 
 ## Changelog
