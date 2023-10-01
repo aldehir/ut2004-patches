@@ -33,3 +33,9 @@ patches to fully patch your UT2004 installation.
   NOTE: You may notice that single player no longer hits up to 1000 fps. This
   was a misleading metric, as it only occurs when there are no OS events to
   process. The counter now reports an accurate fps.
+
+
+# Building
+
+See the [Building Guide](doc/building.md) for how to build UT2004 with these
+patches.
