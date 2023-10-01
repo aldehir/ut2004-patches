@@ -14,7 +14,6 @@ Fix errors and add a few guards in an attempt to support MSVC 2013.
  Setup/Src/USetupDefinition.cpp           |  12 ++--
  Setup/Src/USetupDefinitionWindows.cpp    |   4 +-
  Speech/Inc/sphelper.h                    |   4 +-
- System/CacheRecords.ucl                  | Bin 173664 -> 171766 bytes
  UnrealEd/Inc/BottomBarStandard.h         |  10 ++--
  UnrealEd/Inc/BrowserActor.h              |  16 ++---
  UnrealEd/Inc/BrowserGroup.h              |   4 +-
@@ -314,24 +313,6 @@ index d59a9bc..7afccdd 100644
      {
          ULONG cb = sizeof(WAVEFORMATEX) + pSrc->cbSize;
          *ppCoMemWFEX = (WAVEFORMATEX *)::CoTaskMemAlloc(cb);
-diff --git a/System/CacheRecords.ucl b/System/CacheRecords.ucl
-index c9e2f5cf23259f53e8f032277821fb0b734065c9..44c72a48230646d9c08d82442ad0037f722b500f 100644
-GIT binary patch
-delta 21
-dcmaEGhU?p2u7)j)|K_x3EMeT9v4rUdBLIGj3Y7o=
-
-delta 815
-zcmZ`%L2DC16n;;v)RYiQ?I~c^LJ<!JQ(F+09#%b7M5XcMAxyVvT)Uf1chi<!O!eZm
-zIEA^a6fgFwQt%|yqs2q}0|dc8;Hh{De)D3mw#c$OZ{NK4ecya<jy~nSf6Z;|axcq!
-zlu$s66yu4Ex5KX4{K9i1$MR;>=aSxgd+Fa|%|{J$eT#D=#}T5NTr|)2xpflZaW?^l
-z0+mB`YGO?hJwcq{EhBd5KJp=T5Vd8;p{KNpxDAO-Y9OCd3$g96-7ziUtFTj-zfjO4
-z*;P`}K)*sgSkD1Crd9p0I<9xOFXYQ0wY18L(Qkf?6@0|0KncBmzdc^G%@({Zb<2oS
-zkrq;DDvBq~yNu7C|Lfpk#@EI?6!~bgr?l`sb*#0sdg9dtPwADllG)qg;n7od`g!1*
-zpRf61-k~aZ0@#s~(w`TKVs+sJu2K8E+;wRNC%Fx!F|C8H1|yg7Jp~U3T$)C$2i!#n
-zT!6epB)W71`FlV}fY7(QM)Pv+1YJ|oWv#E#9aKe9qwHu*p~XW(E>);(E`Q^zX5+(u
-z&Q{U~FQ&V<Kxk(gim@@RVNGCcRm5~4EWp$vWPId1Fu<B0;=fNin0*tO!9AG=h7VcR
-yaYv3}<G~HNEB*G8gC|E1umk|Bn~LGdeBaYQlhWR!D`wO1@XKDtAA8xEU;G<ZNWC5a
-
 diff --git a/UnrealEd/Inc/BottomBarStandard.h b/UnrealEd/Inc/BottomBarStandard.h
 index 1a430e2..0a334ed 100644
 --- a/UnrealEd/Inc/BottomBarStandard.h
