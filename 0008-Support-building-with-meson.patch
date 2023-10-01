@@ -1,0 +1,1385 @@
+From 7c6f83f68a52af18cf9362db76d4d85b06b8bc0e Mon Sep 17 00:00:00 2001
+From: Aldehir Rojas <hello@aldehir.com>
+Date: Sun, 1 Oct 2023 06:50:59 -0500
+Subject: [PATCH] Support building with meson
+
+VS2003 is fairly old. Unfortunately we cannot remove the dependency on
+MSVC 7.1 (2003) because there are prebuilt library dependencies.
+However, we can isolate MSVC 7.1 into a minimal toolkit and build with
+Meson to improve maintainability.
+---
+ ALAudio/meson.build        |  24 +++++
+ BugReport/meson.build      |   8 ++
+ Core/meson.build           |  44 ++++++++
+ D3D9Drv/meson.build        |  28 +++++
+ D3DDrv/meson.build         |  28 +++++
+ Editor/Inc/EditorClasses.h |  26 ++---
+ Editor/meson.build         |  72 +++++++++++++
+ Engine/meson.build         | 148 +++++++++++++++++++++++++++
+ Fire/meson.build           |  21 ++++
+ GUIDesigner/meson.build    |  18 ++++
+ IpDrv/meson.build          |  34 +++++++
+ Launch/meson.build         |  33 ++++++
+ Onslaught/meson.build      |  26 +++++
+ OpenGLDrv/meson.build      |  27 +++++
+ UCC/meson.build            |  16 +++
+ UTV2004/meson.build        |  31 ++++++
+ UWeb/meson.build           |  24 +++++
+ UccDepend/meson.build      |  15 +++
+ UnrealEd/meson.build       |  60 +++++++++++
+ Vorbis/meson.build         |  86 ++++++++++++++++
+ WinDrv/meson.build         |  32 ++++++
+ Window/meson.build         |  28 +++++
+ XGame/meson.build          |  20 ++++
+ XInterface/meson.build     |  23 +++++
+ justfile                   |  31 ++++++
+ meson.build                | 202 +++++++++++++++++++++++++++++++++++++
+ zlib/meson.build           |  20 ++++
+ 27 files changed, 1112 insertions(+), 13 deletions(-)
+ create mode 100644 ALAudio/meson.build
+ create mode 100644 BugReport/meson.build
+ create mode 100644 Core/meson.build
+ create mode 100644 D3D9Drv/meson.build
+ create mode 100644 D3DDrv/meson.build
+ create mode 100644 Editor/meson.build
+ create mode 100644 Engine/meson.build
+ create mode 100644 Fire/meson.build
+ create mode 100644 GUIDesigner/meson.build
+ create mode 100644 IpDrv/meson.build
+ create mode 100644 Launch/meson.build
+ create mode 100644 Onslaught/meson.build
+ create mode 100644 OpenGLDrv/meson.build
+ create mode 100644 UCC/meson.build
+ create mode 100644 UTV2004/meson.build
+ create mode 100644 UWeb/meson.build
+ create mode 100644 UccDepend/meson.build
+ create mode 100644 UnrealEd/meson.build
+ create mode 100644 Vorbis/meson.build
+ create mode 100644 WinDrv/meson.build
+ create mode 100644 Window/meson.build
+ create mode 100644 XGame/meson.build
+ create mode 100644 XInterface/meson.build
+ create mode 100644 justfile
+ create mode 100644 meson.build
+ create mode 100644 zlib/meson.build
+
+diff --git a/ALAudio/meson.build b/ALAudio/meson.build
+new file mode 100644
+index 0000000..77e5cb2
+--- /dev/null
++++ b/ALAudio/meson.build
+@@ -0,0 +1,24 @@
++alaudio_lib = library('ALAudio',
++  'Src/ALAudio.cpp',
++  'Src/ALAudioCapture.cpp',
++  'Src/ALAudioStream.cpp',
++  'Src/ALAudioSubsystem.cpp',
++  'Src/ALAudioVoice.cpp',
++  cpp_args: [
++    '/MD',
++    '/DALAUDIO_API=__declspec(dllexport)',
++    '/DALAUDIO_EXPORTS',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [openal, speex, engine, dx8],
++  install: true,
++  install_dir: 'System',
++)
++
++alaudio = declare_dependency(
++  link_with: alaudio_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [openal, speex, engine, dx8],
++)
+diff --git a/BugReport/meson.build b/BugReport/meson.build
+new file mode 100644
+index 0000000..e74a643
+--- /dev/null
++++ b/BugReport/meson.build
+@@ -0,0 +1,8 @@
++executable('BugReport',
++  'Src/BugReport.cpp',
++  cpp_args: ['/ML', '/D_MBCS'],
++  link_args: ['psapi.lib'],
++  win_subsystem: 'windows',
++  install: true,
++  install_dir: 'System',
++)
+diff --git a/Core/meson.build b/Core/meson.build
+new file mode 100644
+index 0000000..53a22ce
+--- /dev/null
++++ b/Core/meson.build
+@@ -0,0 +1,44 @@
++core_lib = library('Core',
++  'Src/Core.cpp',
++  'Src/UExporter.cpp',
++  'Src/UFactory.cpp',
++  'Src/UnAnsi.cpp',
++  'Src/UnArc.cpp',
++  'Src/UnBits.cpp',
++  'Src/UnCache.cpp',
++  'Src/UnClass.cpp',
++  'Src/UnCoreNative.cpp',
++  'Src/UnCoreNet.cpp',
++  'Src/UnCorSc.cpp',
++  'Src/UnGCN.cpp',
++  'Src/UnLinker.cpp',
++  'Src/UnMath.cpp',
++  'Src/UnMem.cpp',
++  'Src/UnMisc.cpp',
++  'Src/UnName.cpp',
++  'Src/UnObj.cpp',
++  'Src/UnProp.cpp',
++  'Src/UnVcWin32.cpp',
++  cpp_args: [
++    '/MD',
++    '/DCORE_API=__declspec(dllexport)',
++    '/D_DEBUG_WIN32_IE=0x0200',
++    '/D_WIN32_WINNT=0x0400',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/BASE:0x10100000',
++    'winmm.lib',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [uebase, ogg, vorbis, vorbisfile],
++  install: true,
++  install_dir: 'System',
++)
++
++core = declare_dependency(
++  link_with: core_lib,
++  link_args: ['winmm.lib'],
++  include_directories: include_directories('Inc'),
++  dependencies: [uebase, ogg, vorbis, vorbisfile],
++)
+diff --git a/D3D9Drv/meson.build b/D3D9Drv/meson.build
+new file mode 100644
+index 0000000..eb3a798
+--- /dev/null
++++ b/D3D9Drv/meson.build
+@@ -0,0 +1,28 @@
++d3d9drv_lib = library('D3D9Drv',
++  'Src/D3D9Drv.cpp',
++  'Src/D3D9MaterialState.cpp',
++  'Src/D3D9RenderDevice.cpp',
++  'Src/D3D9RenderInterface.cpp',
++  'Src/D3D9RenderState.cpp',
++  'Src/D3D9Resource.cpp',
++  'Src/xD3D9Helper.cpp',
++  'Src/xD3D9RenderInterface.cpp',
++  cpp_args: [
++    '/MD',
++    '/DD3D9DRV_API=DLL_EXPORT',
++    '/DD3D9DRV_EXPORTS',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/NODEFAULTLIB:LIBCI',
++  ],
++  dependencies: [engine, dx9, metoolkit],
++  install: true,
++  install_dir: 'System',
++)
++
++d3d9drv = declare_dependency(
++  link_with: d3d9drv_lib,
++  dependencies: [engine, dx9, metoolkit],
++)
+diff --git a/D3DDrv/meson.build b/D3DDrv/meson.build
+new file mode 100644
+index 0000000..d88715a
+--- /dev/null
++++ b/D3DDrv/meson.build
+@@ -0,0 +1,28 @@
++d3ddrv_lib = library('D3DDrv',
++  'Src/D3DDrv.cpp',
++  'Src/D3DMaterialState.cpp',
++  'Src/D3DRenderDevice.cpp',
++  'Src/D3DRenderInterface.cpp',
++  'Src/D3DRenderState.cpp',
++  'Src/D3DResource.cpp',
++  'Src/xD3DHelper.cpp',
++  'Src/xD3DRenderInterface.cpp',
++  cpp_args: [
++    '/MD',
++    '/DD3DDRV_API=DLL_EXPORT',
++    '/DD3DDRV_EXPORTS',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/NODEFAULTLIB:LIBCI',
++  ],
++  dependencies: [engine, dx8, metoolkit],
++  install: true,
++  install_dir: 'System',
++)
++
++d3ddrv = declare_dependency(
++  link_with: d3ddrv_lib,
++  dependencies: [engine, dx8, metoolkit],
++)
+diff --git a/Editor/Inc/EditorClasses.h b/Editor/Inc/EditorClasses.h
+index c762c49..4162339 100644
+--- a/Editor/Inc/EditorClasses.h
++++ b/Editor/Inc/EditorClasses.h
+@@ -132,26 +132,16 @@ DECLARE_NATIVE_TYPE(Editor,UBrushBuilder);
+ #define AUTO_INITIALIZE_REGISTRANTS_EDITOR \
+ 	UPolysExporterOBJ::StaticClass(); \
+ 	ULevelExporterOBJ::StaticClass(); \
+-	UTextureStripCommandlet::StaticClass(); \
+-	UTextureLODCommandlet::StaticClass(); \
+-	UTextureInfoCommandlet::StaticClass(); \
+-	USurfaceTypeCommandlet::StaticClass(); \
+-	UStripSourceCommandlet::StaticClass(); \
+-	USoundLocCommandlet::StaticClass(); \
+-	USetNormalLODCommandlet::StaticClass(); \
+-	URebuildCommandlet::StaticClass(); \
+-	UPS2ConvertCommandlet::StaticClass(); \
+-	UPkgCommandlet::StaticClass(); \
+ 	UBitMatrix::StaticClass(); \
+ 	UBitArray::StaticClass(); \
+ 	UStaticMeshExporterT3D::StaticClass(); \
+ 	UStaticMeshFactory::StaticClass(); \
+ 	UEditInfo::StaticClass(); \
+ 	UPrefab::StaticClass(); \
+-	UTransactor::StaticClass(); \
+-	UTransBuffer::StaticClass(); \
+ 	UAnimNotifyProps::StaticClass(); \
+ 	UEditorEngine::StaticClass(); \
++	UTransactor::StaticClass(); \
++	UTransBuffer::StaticClass(); \
+ 	UMaterialFactory::StaticClass(); \
+ 	GNativeLookupFuncs[Lookup++] = &FindEditorUMaterialFactoryNative; \
+ 	UFontFactory::StaticClass(); \
+@@ -180,17 +170,27 @@ DECLARE_NATIVE_TYPE(Editor,UBrushBuilder);
+ 	USoundExporterWAV::StaticClass(); \
+ 	UTextBufferExporterTXT::StaticClass(); \
+ 	UDumpConfigCommandlet::StaticClass(); \
++	UTextureStripCommandlet::StaticClass(); \
++	UTextureLODCommandlet::StaticClass(); \
++	UTextureInfoCommandlet::StaticClass(); \
++	USurfaceTypeCommandlet::StaticClass(); \
++	UStripSourceCommandlet::StaticClass(); \
++	USoundLocCommandlet::StaticClass(); \
++	USetNormalLODCommandlet::StaticClass(); \
++	URebuildCommandlet::StaticClass(); \
++	UPkgCommandlet::StaticClass(); \
++	UPS2ConvertCommandlet::StaticClass(); \
+ 	UChecksumPackageCommandlet::StaticClass(); \
+ 	UUpdateUModCommandlet::StaticClass(); \
+ 	UMasterCommandlet::StaticClass(); \
+ 	UMapConvertCommandlet::StaticClass(); \
+ 	UMakeCommandlet::StaticClass(); \
+ 	UGroupRepairCommandlet::StaticClass(); \
+-	UDXTConvertCommandlet::StaticClass(); \
+ 	URearrangeIntCommandlet::StaticClass(); \
+ 	UMergeIntCommandlet::StaticClass(); \
+ 	UCompareIntCommandlet::StaticClass(); \
+ 	UDumpIntCommandlet::StaticClass(); \
++	UDXTConvertCommandlet::StaticClass(); \
+ 	UObjectRenameCommandlet::StaticClass(); \
+ 	UCutdownContentCommandlet::StaticClass(); \
+ 	UConvertMaterialCommandlet::StaticClass(); \
+diff --git a/Editor/meson.build b/Editor/meson.build
+new file mode 100644
+index 0000000..6d205e7
+--- /dev/null
++++ b/Editor/meson.build
+@@ -0,0 +1,72 @@
++editor_lib = library('Editor',
++  'Src/Editor.cpp',
++  'Src/TTFontImport.cpp',
++  'Src/UAnalyzeBuild.cpp',
++  'Src/UAnalyzeContentCommandlet.cpp',
++  'Src/UBatchExportCommandlet.cpp',
++  'Src/UBrushBuilder.cpp',
++  'Src/UConformCommandlet.cpp',
++  'Src/UContentCommandlets.cpp',
++  'Src/UConvertMaterialCommandlet.cpp',
++  'Src/UCutdownContentCommandlet.cpp',
++  'Src/UDXTConvertCommandlet.cpp',
++  'Src/UDumpIntCommandlet.cpp',
++  'Src/UGroupRepairCommandlet.cpp',
++  'Src/UMakeCommandlet.cpp',
++  'Src/UMapConvertCommandlet.cpp',
++  'Src/UMasterCommandlet.cpp',
++  'Src/UPS2ConvertCommandlet.cpp',
++  'Src/UPkgCommandlet.cpp',
++  'Src/URebuildCommandlet.cpp',
++  'Src/USetNormalLODCommandlet.cpp',
++  'Src/USoundLocCommandlet.cpp',
++  'Src/UStripSourceCommandlet.cpp',
++  'Src/USurfaceTypeCommandlet.cpp',
++  'Src/UTextureInfoCommandlet.cpp',
++  'Src/UTextureLODCommandlet.cpp',
++  'Src/UTextureStripCommandlet.cpp',
++  'Src/UnBsp.cpp',
++  'Src/UnDumpConfigCommandlet.cpp',
++  'Src/UnEdCnst.cpp',
++  'Src/UnEdCsg.cpp',
++  'Src/UnEdExp.cpp',
++  'Src/UnEdFact.cpp',
++  'Src/UnEdLevelStat.cpp',
++  'Src/UnEdSrv.cpp',
++  'Src/UnEdSrvExecImporters.cpp',
++  'Src/UnEdTran.cpp',
++  'Src/UnEditor.cpp',
++  'Src/UnLightwaveImporter.cpp',
++  'Src/UnMeshEd.cpp',
++  'Src/UnMeshLP.cpp',
++  'Src/UnParams.cpp',
++  'Src/UnPrefab.cpp',
++  'Src/UnScrCom.cpp',
++  'Src/UnShadow.cpp',
++  'Src/UnStaticMesh.cpp',
++  'Src/UnTopics.cpp',
++  'Src/UnVisi.cpp',
++  'Src/xEdInt.cpp',
++  'Src/xObjExporters.cpp',
++  'Src/xTextureConversions.cpp',
++  cpp_args: [
++    '/MD',
++    '/DEDITOR_API=__declspec(dllexport)',
++    '/D_EDITOR_',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/BASE:0x10200000',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [engine, nvdxt],
++  install: true,
++  install_dir: 'System',
++)
++
++editor = declare_dependency(
++  link_with: editor_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [engine, nvdxt],
++)
+diff --git a/Engine/meson.build b/Engine/meson.build
+new file mode 100644
+index 0000000..d3dc610
+--- /dev/null
++++ b/Engine/meson.build
+@@ -0,0 +1,148 @@
++engine_lib = library('Engine',
++  'Src/AFileLog.cpp',
++  'Src/AGameStats.cpp',
++  'Src/ASceneSubtitles.cpp',
++  'Src/AxEmitter.cpp',
++  'Src/AxPickupBase.cpp',
++  'Src/AxProcMesh.cpp',
++  'Src/AxWeatherEffect.cpp',
++  'Src/Engine.cpp',
++  'Src/KarmaSupport.cpp',
++  'Src/KConstraint.cpp',
++  'Src/KDebugDraw.cpp',
++  'Src/KDynStep.cpp',
++  'Src/KFarfield.cpp',
++  'Src/KIntersectFunctions.cpp',
++  'Src/KPhysic.cpp',
++  'Src/KScript.cpp',
++  'Src/KSkeletal.cpp',
++  'Src/KTriListGen.cpp',
++  'Src/KUtils.cpp',
++  'Src/LIPSincSupport.cpp',
++  'Src/NullDrv.cpp',
++  'Src/UExportCacheCommandlet.cpp',
++  'Src/ULodMesh.cpp',
++  'Src/UnActCol.cpp',
++  'Src/UnActor.cpp',
++  'Src/UnAudio.cpp',
++  'Src/UnBeamEmitter.cpp',
++  'Src/UnBunch.cpp',
++  'Src/UnCacheManager.cpp',
++  'Src/UnCamera.cpp',
++  'Src/UnCameraEffects.cpp',
++  'Src/UnCamMgr.cpp',
++  'Src/UnCanvas.cpp',
++  'Src/UnCDKey.cpp',
++  'Src/UnChan.cpp',
++  'Src/UnConn.cpp',
++  'Src/UnController.cpp',
++  'Src/UnConvexVolume.cpp',
++  'Src/UnDemoPenLev.cpp',
++  'Src/UnDemoRec.cpp',
++  'Src/UnDownload.cpp',
++  'Src/UnEngine.cpp',
++  'Src/UnErrorChecking.cpp',
++  'Src/UnFluidSurface.cpp',
++  'Src/UnFont.cpp',
++  'Src/UnFPoly.cpp',
++  'Src/UnGame.cpp',
++  'Src/UnGameUtilities.cpp',
++  'Src/UnIn.cpp',
++  'Src/UnInteraction.cpp',
++  'Src/UnInteractionMaster.cpp',
++  'Src/UnkDOP.cpp',
++  'Src/UnLevAct.cpp',
++  'Src/UnLevel.cpp',
++  'Src/UnLevTic.cpp',
++  'Src/UnLodMesh.cpp',
++  'Src/UnManifest.cpp',
++  'Src/UnMaterial.cpp',
++  'Src/UnMatineeTools.cpp',
++  'Src/UnMesh.cpp',
++  'Src/UnMeshEmitter.cpp',
++  'Src/UnModel.cpp',
++  'Src/UnModelLight.cpp',
++  'Src/UnMover.cpp',
++  'Src/UnNavigationPoint.cpp',
++  'Src/UnNetDrv.cpp',
++  'Src/UnOctree.cpp',
++  'Src/UnPackageCheckInfo.cpp',
++  'Src/UnParams.cpp',
++  'Src/UnParticleEmitter.cpp',
++  'Src/UnParticleSystem.cpp',
++  'Src/UnPath.cpp',
++  'Src/UnPawn.cpp',
++  'Src/UnPenLev.cpp',
++  'Src/UnPhysic.cpp',
++  'Src/UnPlayer.cpp',
++  'Src/UnPlayInfo.cpp',
++  'Src/UnPrim.cpp',
++  'Src/UnProjector.cpp',
++  'Src/UnReach.cpp',
++  'Src/UnRebuildTools.cpp',
++  'Src/UnRender.cpp',
++  'Src/UnRenderBatch.cpp',
++  'Src/UnRenderBSP.cpp',
++  'Src/UnRenderEditorActor.cpp',
++  'Src/UnRenderLight.cpp',
++  'Src/UnRenderPool.cpp',
++  'Src/UnRenderResource.cpp',
++  'Src/UnRenderStaticMesh.cpp',
++  'Src/UnRenderUtil.cpp',
++  'Src/UnRenderVisibility.cpp',
++  'Src/UnRoute.cpp',
++  'Src/UnSceneManager.cpp',
++  'Src/UnScript.cpp',
++  'Src/UnScriptedTexture.cpp',
++  'Src/UnSecurity.cpp',
++  'Src/UnShadowProjector.cpp',
++  'Src/UnSkeletalMesh.cpp',
++  'Src/UnSkeletalMeshCollision.cpp',
++  'Src/UnSkeletalTools.cpp',
++  'Src/UnSparkEmitter.cpp',
++  'Src/UnSpriteEmitter.cpp',
++  'Src/UnStatGraph.cpp',
++  'Src/UnStaticMesh.cpp',
++  'Src/UnStaticMeshBuild.cpp',
++  'Src/UnStaticMeshCollision.cpp',
++  'Src/UnStats.cpp',
++  'Src/UnSVehicle.cpp',
++  'Src/UnTerrain.cpp',
++  'Src/UnTerrainTools.cpp',
++  'Src/UnTex.cpp',
++  'Src/UnTrace.cpp',
++  'Src/UnTrailEmitter.cpp',
++  'Src/UnURL.cpp',
++  'Src/UnVehicle.cpp',
++  'Src/UnVertMesh.cpp',
++  'Src/UnVoiceChat.cpp',
++  'Src/UnVolume.cpp',
++  'Src/USpline.cpp',
++  'Src/UStreamInterface.cpp',
++  'Src/xDataObject.cpp',
++  'Src/xForceFeedback.cpp',
++  'Src/xParticleMgr.cpp',
++  cpp_args: [
++    '/MD',
++    '/DENGINE_API=__declspec(dllexport)',
++    '/D_DEBUG_WIN32_IE=0x0200',
++    '/D_WIN32_WINNT=0x0400',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/BASE:0x10300000',
++    meson.current_source_dir() / 'Lib/NvTriStrip.lib',
++    meson.current_source_dir() / 'Lib/ENCVAG.LIB',
++    meson.current_source_dir() / 'Lib/s3tc.lib',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [metoolkit, ifc, nvdxt, core],
++  install: true,
++  install_dir: 'System',
++)
++
++engine = declare_dependency(
++  link_with: engine_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [metoolkit, ifc, nvdxt, core],
++)
+diff --git a/Fire/meson.build b/Fire/meson.build
+new file mode 100644
+index 0000000..b1d301d
+--- /dev/null
++++ b/Fire/meson.build
+@@ -0,0 +1,21 @@
++fire_lib = library('Fire',
++  'Src/UnFractal.cpp',
++  cpp_args: [
++    '/MD',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/BASE:0x10500000',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++  install: true,
++  install_dir: 'System',
++)
++
++fire = declare_dependency(
++  link_with: fire_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++)
+diff --git a/GUIDesigner/meson.build b/GUIDesigner/meson.build
+new file mode 100644
+index 0000000..c204dce
+--- /dev/null
++++ b/GUIDesigner/meson.build
+@@ -0,0 +1,18 @@
++guidesigner_lib = library('GUIDesigner',
++  'Src/GUIDesign.cpp',
++  cpp_args: [
++    '/MD',
++    '/DGUIDESIGNER_API=__declspec(dllexport)',
++    '/DWITH_LIPSINC',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [ipdrv, window, xinterface, xgame, engine],
++  install: true,
++  install_dir: 'System',
++)
++
++guidesiner = declare_dependency(
++  link_with: guidesigner_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [ipdrv, window, xinterface, xgame, engine],
++)
+diff --git a/IpDrv/meson.build b/IpDrv/meson.build
+new file mode 100644
+index 0000000..3541097
+--- /dev/null
++++ b/IpDrv/meson.build
+@@ -0,0 +1,34 @@
++ipdrv_lib = library('IpDrv',
++  'Src/HTTPDownload.cpp',
++  'Src/InternetLink.cpp',
++  'Src/IpDrv.cpp',
++  'Src/MasterServerClient.cpp',
++  'Src/MasterServerUplink.cpp',
++  'Src/TcpLink.cpp',
++  'Src/TcpNetDriver.cpp',
++  'Src/UCompressCommandlet.cpp',
++  'Src/UdpLink.cpp',
++  'Src/UnIpDrvNative.cpp',
++  'Src/UnSocket.cpp',
++  cpp_args: [
++    '/MD',
++    '/DIPDRV_API=__declspec(dllexport)',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/BASE:0x10700000',
++    'wsock32.lib',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++  install: true,
++  install_dir: 'System',
++)
++
++ipdrv = declare_dependency(
++  link_with: ipdrv_lib,
++  link_args: ['wsock32.lib'],
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++)
+diff --git a/Launch/meson.build b/Launch/meson.build
+new file mode 100644
+index 0000000..6d628c1
+--- /dev/null
++++ b/Launch/meson.build
+@@ -0,0 +1,33 @@
++launch_res = custom_target('Launch.res',
++  output: 'Launch.res',
++  input: 'Src/Res/LaunchRes.rc',
++  command: [
++    rc,
++    '/i' + meson.current_source_dir() / 'Src/Res',
++    '/fo@OUTPUT@',
++    '@INPUT@',
++  ]
++)
++
++executable('UT2004',
++  'Src/Helper.cpp',
++  'Src/Launch.cpp',
++  launch_res,
++  cpp_args: [
++    '/MD',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/STACK:8388608',
++    '/BASE:0x10900000',
++    'dbghelp.lib',
++    'wbemuuid.lib',
++    'comsupp.lib',
++  ],
++  win_subsystem: 'windows',
++  dependencies: [
++    windrv, uweb, fire, xinterface, alaudio, zlib, editor, window, engine
++  ],
++  install: true,
++  install_dir: 'System',
++)
+diff --git a/Onslaught/meson.build b/Onslaught/meson.build
+new file mode 100644
+index 0000000..b212af9
+--- /dev/null
++++ b/Onslaught/meson.build
+@@ -0,0 +1,26 @@
++onslaught_lib = library('Onslaught',
++  'Src/ONSChopperCraft.cpp',
++  'Src/ONSHoverCraft.cpp',
++  'Src/Onslaught.cpp',
++  'Src/ONSPlaneCraft.cpp',
++  'Src/ONSTreadCraft.cpp',
++  'Src/ONSVehicle.cpp',
++  'Src/ONSWeapon.cpp',
++  'Src/ONSWheeledCraft.cpp',
++  cpp_args: [
++    '/MD',
++    '/DONSLAUGHT_API=__declspec(dllexport)',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [ipdrv, xgame, engine],
++  install: true,
++  install_dir: 'System',
++)
++
++onslaught = declare_dependency(
++  link_with: onslaught_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [ipdrv, xgame, engine],
++)
+diff --git a/OpenGLDrv/meson.build b/OpenGLDrv/meson.build
+new file mode 100644
+index 0000000..ecb8ee2
+--- /dev/null
++++ b/OpenGLDrv/meson.build
+@@ -0,0 +1,27 @@
++opengl_lib = library('OpenGLDrv',
++  'Src/OpenGLDrv.cpp',
++  'Src/OpenGLMaterialState.cpp',
++  'Src/OpenGLRenderDevice.cpp',
++  'Src/OpenGLRenderInterface.cpp',
++  'Src/OpenGLResource.cpp',
++  cpp_args: [
++    '/MD',
++    '/DOPENGLDRV_API=DLL_EXPORT',
++    '/DOPENGLDRV_EXPORTS',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/NODEFAULTLIB:LIBCI',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++  install: true,
++  install_dir: 'System',
++)
++
++opengl = declare_dependency(
++  link_with: opengl_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++)
+diff --git a/UCC/meson.build b/UCC/meson.build
+new file mode 100644
+index 0000000..203dc90
+--- /dev/null
++++ b/UCC/meson.build
+@@ -0,0 +1,16 @@
++executable('UCC',
++  'Src/UCC.cpp',
++  cpp_args: [
++    '/MD',
++    '/D_CONSOLE',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/STACK:8388608',
++    '/BASE:0x10900000',
++  ],
++  win_subsystem: 'console',
++  dependencies: [engine, zlib],
++  install: true,
++  install_dir: 'System',
++)
+diff --git a/UTV2004/meson.build b/UTV2004/meson.build
+new file mode 100644
+index 0000000..f785549
+--- /dev/null
++++ b/UTV2004/meson.build
+@@ -0,0 +1,31 @@
++utv2004_lib = library('UTV2004',
++  'Src/BunchDelayer.cpp',
++  'Src/DemoPassthrough.cpp',
++  'Src/ReplicatorEngine.cpp',
++  'Src/UtvChannel.cpp',
++  'Src/UTVCommandlet.cpp',
++  'Src/UTVPackageMap.cpp',
++  'Src/UTVRemoteControll.cpp',
++  'Src/UTVRemoteControll.h',
++  'Src/UTVUplink.cpp',
++  'Src/UtvVoiceChannel.cpp',
++  cpp_args: [
++    '/MD',
++    '/DUTV2004_API=__declspec(dllexport)',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/BASE:0x10500000'
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [ipdrv, engine],
++  install: true,
++  install_dir: 'System',
++)
++
++utv2004 = declare_dependency(
++  link_with: utv2004_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [ipdrv, engine],
++)
+diff --git a/UWeb/meson.build b/UWeb/meson.build
+new file mode 100644
+index 0000000..0761745
+--- /dev/null
++++ b/UWeb/meson.build
+@@ -0,0 +1,24 @@
++uweb_lib = library('UWeb',
++  'Src/UWeb.cpp',
++  'Src/UWebNative.cpp',
++  'Src/WebServer.cpp',
++  cpp_args: [
++    '/MD',
++    '/DUWEB_API=__declspec(dllexport)',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/BASE:0x10700000'
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++  install: true,
++  install_dir: 'System',
++)
++
++uweb = declare_dependency(
++  link_with: uweb_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++)
+diff --git a/UccDepend/meson.build b/UccDepend/meson.build
+new file mode 100644
+index 0000000..47faab5
+--- /dev/null
++++ b/UccDepend/meson.build
+@@ -0,0 +1,15 @@
++executable('UccDepend',
++  'Source/UccDepend.cpp',
++  cpp_args: [
++    '/MD',
++    '/D_CONSOLE',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/STACK:8388608',
++    '/BASE:0x10900000',
++  ],
++  win_subsystem: 'console',
++  install: true,
++  install_dir: 'System',
++)
+diff --git a/UnrealEd/meson.build b/UnrealEd/meson.build
+new file mode 100644
+index 0000000..9f2cd7d
+--- /dev/null
++++ b/UnrealEd/meson.build
+@@ -0,0 +1,60 @@
++unrealed_res = custom_target('UnrealEd.res',
++  output: 'UnrealEd.res',
++  input: 'Src/Res/UnrealEd.rc',
++  command: [
++    rc,
++    '/i' + meson.current_source_dir() / 'Src/Res',
++    '/fo@OUTPUT@',
++    '@INPUT@',
++  ]
++)
++
++executable('UnrealEd',
++  'Src/Browser.cpp',
++  'Src/BrowserAnimation.cpp',
++  'Src/BrowserLIPSinc.cpp',
++  'Src/BuildPropSheet.cpp',
++  'Src/DlgArray.h',
++  'Src/DlgTexProp.cpp',
++  'Src/EdHook.cpp',
++  'Src/EdModes.cpp',
++  'Src/EmitterWizard.cpp',
++  'Src/GenericDlgOptions.cpp',
++  'Src/GeomFitUtils.cpp',
++  'Src/KarmaEditorSupport.cpp',
++  'Src/Main.cpp',
++  'Src/ParticleEditor.cpp',
++  'Src/ParticleEditorComponent.cpp',
++  'Src/ParticleEditorControls.cpp',
++  'Src/ParticleEditorTab.cpp',
++  'Src/ParticleEditorToolLabel.cpp',
++  'Src/ParticleEditorTools.cpp',
++  'Src/SurfacePropSheet.cpp',
++  'Src/UnEdAct.cpp',
++  'Src/UnEdCam.cpp',
++  'Src/UnEdClick.cpp',
++  'Src/UnEdModeTools.cpp',
++  'Src/UnEdRend.cpp',
++  'Src/UnrealEd.cpp',
++  'Src/UnrealEdMisc.cpp',
++  'Src/UnrealEdSrv.cpp',
++  'Src/UnSyntax.cpp',
++  'Src/UnTexAlignTools.cpp',
++  'Src/ViewportFrame.cpp',
++  unrealed_res,
++  cpp_args: [
++    '/MD',
++    '/D_WIN32_IE=0x0200',
++  ],
++  link_args: [
++    '/STACK:1048576',
++    '/BASE:0x10E00000',
++  ],
++  win_subsystem: 'windows',
++  include_directories: include_directories('Inc'),
++  dependencies: [
++    editor, window, engine, metoolkit, zlib
++  ],
++  install: true,
++  install_dir: 'System',
++)
+diff --git a/Vorbis/meson.build b/Vorbis/meson.build
+new file mode 100644
+index 0000000..6f64921
+--- /dev/null
++++ b/Vorbis/meson.build
+@@ -0,0 +1,86 @@
++vorbis_args = [
++  '/MD',
++  '/D_MBCS',
++  '/Zp8',
++]
++
++ogg_incs = include_directories('ogg/include')
++
++ogg_lib = library('ogg',
++  'ogg/src/bitwise.c',
++  'ogg/src/framing.c',
++  c_args: vorbis_args,
++  link_args: [
++    '/DEF:' + meson.current_source_dir() / 'ogg/win32/ogg.def'
++  ],
++  include_directories: [ogg_incs],
++  install: true,
++  install_dir: 'System',
++)
++
++ogg = declare_dependency(
++  link_with: ogg_lib,
++  include_directories: [ogg_incs],
++)
++
++vorbis_incs = include_directories('vorbis/include')
++
++vorbis_lib = library('vorbis',
++  'vorbis/lib/analysis.c',
++  'vorbis/lib/barkmel.c',
++  'vorbis/lib/bitrate.c',
++  'vorbis/lib/block.c',
++  'vorbis/lib/codebook.c',
++  'vorbis/lib/envelope.c',
++  'vorbis/lib/floor0.c',
++  'vorbis/lib/floor1.c',
++  'vorbis/lib/info.c',
++  'vorbis/lib/lpc.c',
++  'vorbis/lib/lsp.c',
++  'vorbis/lib/mapping0.c',
++  'vorbis/lib/mdct.c',
++  'vorbis/lib/psy.c',
++  'vorbis/lib/registry.c',
++  'vorbis/lib/res0.c',
++  'vorbis/lib/sharedbook.c',
++  'vorbis/lib/smallft.c',
++  'vorbis/lib/synthesis.c',
++  'vorbis/lib/time0.c',
++  'vorbis/lib/window.c',
++  c_args: vorbis_args,
++  link_args: [
++    'odbc32.lib',
++    'odbccp32.lib',
++    '/DEF:' + meson.current_source_dir() / 'vorbis/win32/vorbis.def'
++  ],
++  include_directories: vorbis_incs,
++  dependencies: [ogg],
++  install: true,
++  install_dir: 'System',
++)
++
++vorbis = declare_dependency(
++  link_with: vorbis_lib,
++  include_directories: vorbis_incs,
++  dependencies: [ogg],
++)
++
++vorbisfile_lib = library('vorbisfile',
++  'vorbis/lib/vorbisfile.c',
++  c_args: vorbis_args,
++  link_args: [
++    'odbc32.lib',
++    'odbccp32.lib',
++    '/DEF:' + meson.current_source_dir() / 'vorbis/win32/vorbisfile.def'
++  ],
++  include_directories: vorbis_incs,
++  dependencies: [vorbis],
++  install: true,
++  install_dir: 'System',
++)
++
++vorbisfile = declare_dependency(
++  link_with: vorbisfile_lib,
++  include_directories: vorbis_incs,
++  dependencies: [vorbis],
++)
+diff --git a/WinDrv/meson.build b/WinDrv/meson.build
+new file mode 100644
+index 0000000..db61993
+--- /dev/null
++++ b/WinDrv/meson.build
+@@ -0,0 +1,32 @@
++windrv_lib = library('WinDrv',
++  'Src/UnDebuggerCore.cpp',
++  'Src/UnDelphiInterface.cpp',
++  'Src/WinClient.cpp',
++  'Src/WinDivX.cpp',
++  'Src/WinDrv.cpp',
++  'Src/WinSpeech.cpp',
++  'Src/WinViewport.cpp',
++  cpp_args: [
++    '/MD',
++    '/DWINDRV_API=__declspec(dllexport)',
++    '/D_WIN32_IE=0x0200',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/BASE:0x11100000',
++    'winmm.lib',
++    'imm32.lib',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [window, engine, speech, dx8, windows_xp_sdk],
++  install: true,
++  install_dir: 'System',
++)
++
++windrv = declare_dependency(
++  link_with: windrv_lib,
++  link_args: ['winmm.lib', 'imm32.lib'],
++  include_directories: include_directories('Inc'),
++  dependencies: [window, engine, speech, dx8, windows_xp_sdk],
++)
+diff --git a/Window/meson.build b/Window/meson.build
+new file mode 100644
+index 0000000..a1c3348
+--- /dev/null
++++ b/Window/meson.build
+@@ -0,0 +1,28 @@
++window_lib = library('Window',
++  'Src/Controls.cpp',
++  'Src/Dialogs.cpp',
++  'Src/Properties.cpp',
++  'Src/Utils.cpp',
++  'Src/Window.cpp',
++  cpp_args: [
++    '/MD',
++    '/DWINDOW_API=__declspec(dllexport)',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  link_args: [
++    '/BASE:0x11000000',
++    'comctl32.lib',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++  install: true,
++  install_dir: 'System',
++)
++
++window = declare_dependency(
++  link_with: window_lib,
++  link_args: ['comctl32.lib'],
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++)
+diff --git a/XGame/meson.build b/XGame/meson.build
+new file mode 100644
+index 0000000..dc0a235
+--- /dev/null
++++ b/XGame/meson.build
+@@ -0,0 +1,20 @@
++xgame_lib = library('XGame',
++  'Src/XGame.cpp',
++  'Src/XUtil.cpp',
++  cpp_args: [
++    '/MD',
++    '/DXGAME_API=__declspec(dllexport)',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++  install: true,
++  install_dir: 'System',
++)
++
++xgame = declare_dependency(
++  link_with: xgame_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [engine],
++)
+diff --git a/XInterface/meson.build b/XInterface/meson.build
+new file mode 100644
+index 0000000..7fce8a0
+--- /dev/null
++++ b/XInterface/meson.build
+@@ -0,0 +1,23 @@
++xinterface_lib = library('XInterface',
++  'Src/AHudBase.cpp',
++  'Src/GUILists.cpp',
++  'Src/UnGUI.cpp',
++  'Src/UnGUICore.cpp',
++  'Src/XInterface.cpp',
++  cpp_args: [
++    '/MD',
++    '/DXINTERFACE_API=__declspec(dllexport)',
++    '/D_WIN32_IE=0x0200',
++    '/DWITH_LIPSINC',
++  ],
++  include_directories: include_directories('Inc'),
++  dependencies: [ipdrv, window, xgame, engine],
++  install: true,
++  install_dir: 'System',
++)
++
++xinterface = declare_dependency(
++  link_with: xinterface_lib,
++  include_directories: include_directories('Inc'),
++  dependencies: [ipdrv, window, xgame, engine],
++)
+diff --git a/justfile b/justfile
+new file mode 100644
+index 0000000..ef38026
+--- /dev/null
++++ b/justfile
+@@ -0,0 +1,31 @@
++set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
++
++debug := env_var_or_default("DEBUG", "")
++buildtype := if debug == "1" { "debug" } else { "release" }
++ucc_args := if buildtype == "debug" { "-debug" } else { "" }
++
++install: install-bin ucc-make
++
++install-bin: build
++  ninja -C build/{{buildtype}} install
++
++build: configure
++  ninja -C build/{{buildtype}}
++
++configure:
++  meson setup build/{{buildtype}} -Db_vscrt=none --buildtype {{buildtype}} --prefix {{justfile_directory()}}
++
++reconfigure:
++  meson setup build/{{buildtype}} -Db_vscrt=none --buildtype {{buildtype}} --prefix {{justfile_directory()}} --reconfigure
++
++clean:
++  ninja -C build/{{buildtype}} clean
++
++play:
++  System\UT2004.exe -windowed -log
++
++ucc-make:
++  System\UccDepend.exe System\Default.ini {{ucc_args}}
++
++ucc-clean:
++  Remove-Item System\*.u
+diff --git a/meson.build b/meson.build
+new file mode 100644
+index 0000000..428a85e
+--- /dev/null
++++ b/meson.build
+@@ -0,0 +1,202 @@
++project('UT2004', 'c','cpp')
++
++rc = find_program('rc')
++
++windows_xp_sdk = declare_dependency(
++  include_directories: include_directories(
++    'Microsoft Platform SDK for Windows XP SP2/Include'
++  ),
++  link_args: [
++    '/LIBPATH:' + meson.project_source_root() / 'Microsoft Platform SDK for Windows XP SP2/Lib'
++  ]
++)
++
++metoolkit = declare_dependency(
++  include_directories: include_directories('metoolkit/include')
++)
++
++add_project_arguments(
++  '/DWIN32',
++  '/D_WIN32',
++  '/D_WINDOWS',
++  '/DSUPPORTS_PRAGMA_PACK=1',
++  '/EHsc',
++  '/Zc:forScope',
++  language: ['c', 'cpp'],
++)
++
++metoolkit_libs = [
++  'Mdt.lib',
++  'MdtKea.lib',
++  'MdtBcl.lib',
++  'Mst.lib',
++  'McdFrame.lib',
++  'McdCommon.lib',
++  'McdPrimitives.lib',
++  'McdConvex.lib',
++  'McdConvexCreateHull.lib',
++  'MeGlobals.lib',
++  'MeAssetFactory.lib',
++  'MeAssetDB.lib',
++  'MeAssetDBXMLIO.lib',
++  'MeXML.lib',
++]
++
++uebase_compile_args = []
++
++if get_option('buildtype') == 'debug' or get_option('buildtype') == 'debugoptimized'
++  uebase_compile_args += [
++    '/Od', '/Op', '/G6', '/GF', '/Gm', '/EHsc', '/Zp4', '/Zc:forScope', '/ZI',
++    '/DDEBUG', '/D_DEBUG',
++  ]
++
++  metoolkit = declare_dependency(
++    include_directories: include_directories('metoolkit/include'),
++    link_args: [
++      '/LIBPATH:' + meson.project_source_root() / 'metoolkit/lib.chk/win32_single_msvcrt',
++      metoolkit_libs,
++    ]
++  )
++
++  ifc = declare_dependency(
++    include_directories: include_directories('IFC/Inc'),
++    link_args: [
++      meson.project_source_root() / 'IFC/Debug/IFC23.lib',
++    ]
++  )
++else
++  uebase_compile_args += [
++    '/Ox', '/Og', '/Ob2', '/Oi', '/Ot', '/Oy', '/G6', '/GF', '/FD', '/Gy', '/EHsc',
++    '/Zp4', '/Zc:forScope', '/Zi',
++    '/DNDEBUG',
++    '/D_NDEBUG',
++  ]
++
++  metoolkit = declare_dependency(
++    include_directories: include_directories('metoolkit/include'),
++    link_args: [
++      '/LIBPATH:' + meson.project_source_root() / 'metoolkit/lib.rel/win32_single_msvcrt',
++      metoolkit_libs,
++    ]
++  )
++
++  ifc = declare_dependency(
++    include_directories: include_directories('IFC/Inc'),
++    link_args: [
++      meson.project_source_root() / 'IFC/Release/IFC23.lib',
++    ]
++  )
++endif
++
++nvdxt = declare_dependency(
++  include_directories: include_directories('nvDXT/Inc'),
++  link_args: [
++    '/LIBPATH:'+ meson.project_source_root() / 'nvDXT/Lib',
++    'nvDXTlib.lib',
++  ],
++)
++
++dx8 = declare_dependency(
++  include_directories: include_directories('DirectX8/Inc'),
++  link_args: [
++    '/LIBPATH:' + meson.project_source_root() / 'DirectX8/Lib',
++    'd3d8.lib',
++    'd3dx8.lib',
++    'ddraw.lib',
++    'dinput8.lib',
++    'dsound.lib',
++    'dxerr8.lib',
++    'dxguid.lib',
++  ],
++)
++
++dx9 = declare_dependency(
++  include_directories: include_directories('DirectX9/Include'),
++  link_args: [
++    '/LIBPATH:' + meson.project_source_root() / 'DirectX9/Lib',
++    'd3d9.lib',
++    'd3dx9.lib',
++    'dxguid.lib',
++  ],
++)
++
++speech = declare_dependency(
++  include_directories: include_directories('Speech/Inc'),
++  link_args: [
++    meson.project_source_root() / 'Speech/Lib/sapi.lib'
++  ],
++)
++
++speex = declare_dependency(
++  include_directories: include_directories('Speex/Inc'),
++  link_args: [
++    meson.project_source_root() / 'Speex/Lib/libspeex.lib',
++  ],
++)
++
++openal = declare_dependency(
++  include_directories: include_directories('OpenAL/Inc'),
++)
++
++uebase = declare_dependency(
++  compile_args: [
++    uebase_compile_args,
++    '/DUNICODE',
++    '/D_UNICODE',
++    '/DDO_GUARD=1',
++    '/DDO_GUARD_SLOW=0',
++    '/DDO_CHECK=1',
++    get_option('buildtype') == 'release' ? '/DDO_CHECK_SLOW=0' : '/DDO_CHECK_SLOW=1',
++    '/DDO_STAT=1',
++    '/DDO_STAT_SLOW=0',
++    '/DDO_CLOCK=1',
++    '/DDO_CLOCK_SLOW=0',
++    '/DWITH_DXTLIB',
++    '/DDIRECTINPUT_VERSION=0x0800',
++  ],
++  link_args: [
++    '/NODEFAULTLIB:LIBCMTD',
++    '/NODEFAULTLIB:MSVCRTD',
++    '/NODEFAULTLIB:LIBCD',
++    '/NODEFAULTLIB:LIBC',
++    '/NODEFAULTLIB:LIBCMT',
++  ],
++)
++
++add_project_link_arguments(
++  '/MACHINE:i386',
++  language: ['c', 'cpp'],
++)
++
++subdir('zlib')
++subdir('vorbis')
++subdir('Core')
++subdir('Engine')
++subdir('Fire')
++subdir('Window')
++subdir('IpDrv')
++subdir('WinDrv')
++subdir('ALAudio')
++subdir('D3DDrv')
++subdir('D3D9Drv')
++subdir('OpenGLDrv')
++subdir('Editor')
++subdir('UWeb')
++
++subdir('XGame')
++subdir('XInterface')
++subdir('Onslaught')
++subdir('UTV2004')
++
++subdir('GUIDesigner')
++subdir('BugReport')
++subdir('Launch')
++subdir('UCC')
++subdir('UccDepend')
++
++# The build for UnrealEd is currently broken.
++#
++# In order to produce libraries that are ABI compatible with stock UT2004, we
++# need to turn `WITH_LIPSINC` on. Only UnrealEd directly links with this
++# library, so we cannot build it at this time.
++#subdir('UnrealEd')
+diff --git a/zlib/meson.build b/zlib/meson.build
+new file mode 100644
+index 0000000..67daa6a
+--- /dev/null
++++ b/zlib/meson.build
+@@ -0,0 +1,20 @@
++zlib_lib = static_library('zlib',
++  'adler32.c',
++  'compress.c',
++  'crc32.c',
++  'deflate.c',
++  'infblock.c',
++  'infcodes.c',
++  'inffast.c',
++  'inflate.c',
++  'inftrees.c',
++  'infutil.c',
++  'trees.c',
++  'uncompr.c',
++  'zutil.c',
++)
++
++zlib = declare_dependency(
++  link_with: zlib_lib,
++  include_directories: include_directories('.'),
++)
+-- 
+2.31.1.windows.1
+

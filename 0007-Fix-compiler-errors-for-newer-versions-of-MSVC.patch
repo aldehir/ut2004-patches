@@ -1,0 +1,2081 @@
+From 72a2f76dafc284a183938a9d6a48a52cd6ef2eef Mon Sep 17 00:00:00 2001
+From: Aldehir Rojas <hello@aldehir.com>
+Date: Sun, 1 Oct 2023 06:47:04 -0500
+Subject: [PATCH] Fix compiler errors for newer versions of MSVC
+
+Fix errors and add a few guards in an attempt to support MSVC 2013.
+---
+ Core/Inc/UnObjBas.h                      |   4 +-
+ Core/Inc/UnVcWin32.h                     |   3 +-
+ Engine/Src/UnModelLight.cpp              |   4 +-
+ Engine/Src/UnTex.cpp                     |   6 +-
+ Engine/Src/xForceFeedback.cpp            |   4 ++
+ Setup/Src/Setup.cpp                      |  24 ++++----
+ Setup/Src/USetupDefinition.cpp           |  12 ++--
+ Setup/Src/USetupDefinitionWindows.cpp    |   4 +-
+ Speech/Inc/sphelper.h                    |   4 +-
+ System/CacheRecords.ucl                  | Bin 173664 -> 171766 bytes
+ UnrealEd/Inc/BottomBarStandard.h         |  10 ++--
+ UnrealEd/Inc/BrowserActor.h              |  16 ++---
+ UnrealEd/Inc/BrowserGroup.h              |   4 +-
+ UnrealEd/Inc/BrowserMaster.h             |   2 +-
+ UnrealEd/Inc/BrowserMesh.h               |  10 ++--
+ UnrealEd/Inc/BrowserMusic.h              |  10 ++--
+ UnrealEd/Inc/BrowserPrefab.h             |  20 +++----
+ UnrealEd/Inc/BrowserSound.h              |  24 ++++----
+ UnrealEd/Inc/BrowserStaticMesh.h         |  18 +++---
+ UnrealEd/Inc/BrowserTexture.h            |  24 ++++----
+ UnrealEd/Inc/ButtonBar.h                 |   4 +-
+ UnrealEd/Inc/CodeFrame.h                 |  14 ++---
+ UnrealEd/Inc/DlgAddSpecial.h             |   6 +-
+ UnrealEd/Inc/DlgBrushBuilder.h           |   4 +-
+ UnrealEd/Inc/DlgBrushImport.h            |   4 +-
+ UnrealEd/Inc/DlgDepth.h                  |   4 +-
+ UnrealEd/Inc/DlgGeneric.h                |   4 +-
+ UnrealEd/Inc/DlgLoadErrors.h             |   2 +-
+ UnrealEd/Inc/DlgMapCheck.h               |   6 +-
+ UnrealEd/Inc/DlgMapImport.h              |   4 +-
+ UnrealEd/Inc/DlgNewMaterial.h            |   6 +-
+ UnrealEd/Inc/DlgRename.h                 |   4 +-
+ UnrealEd/Inc/DlgScaleLights.h            |   4 +-
+ UnrealEd/Inc/DlgSearchActors.h           |  10 ++--
+ UnrealEd/Inc/DlgTexReplace.h             |   8 +--
+ UnrealEd/Inc/DlgTipOfTheDay.h            |   4 +-
+ UnrealEd/Inc/DlgViewportConfig.h         |   4 +-
+ UnrealEd/Inc/MatineePreview.h            |  18 +++---
+ UnrealEd/Inc/MatineeSheet.h              |  42 ++++++-------
+ UnrealEd/Inc/ParticleEditorTools.h       |   6 +-
+ UnrealEd/Inc/TerrainEditSheet.h          |  72 +++++++++++------------
+ UnrealEd/Src/BrowserAnimation.cpp        |  40 ++++++-------
+ UnrealEd/Src/BrowserLIPSinc.cpp          |  50 ++++++++--------
+ UnrealEd/Src/BuildPropSheet.cpp          |  46 +++++++--------
+ UnrealEd/Src/DlgArray.h                  |   4 +-
+ UnrealEd/Src/DlgTexProp.cpp              |  16 ++---
+ UnrealEd/Src/EmitterWizard.cpp           |  10 ++--
+ UnrealEd/Src/ParticleEditor.cpp          |   8 +--
+ UnrealEd/Src/ParticleEditorTab.cpp       |   2 +-
+ UnrealEd/Src/ParticleEditorToolLabel.cpp |   2 +-
+ UnrealEd/Src/ParticleEditorTools.cpp     |  68 ++++++++++-----------
+ UnrealEd/Src/SurfacePropSheet.cpp        |  54 ++++++++---------
+ 52 files changed, 369 insertions(+), 364 deletions(-)
+
+diff --git a/Core/Inc/UnObjBas.h b/Core/Inc/UnObjBas.h
+index 4938726..db72e5b 100644
+--- a/Core/Inc/UnObjBas.h
++++ b/Core/Inc/UnObjBas.h
+@@ -484,8 +484,8 @@ public: \
+ 			GPackage, \
+ 			StaticConfigName(), \
+ 			RF_Public | RF_Standalone | RF_Transient | RF_Native, \
+-			(void(*)(void*))TClass::InternalConstructor, \
+-			(void(UObject::*)())TClass::StaticConstructor \
++			(void(*)(void*))&TClass::InternalConstructor, \
++			(void(UObject::*)())&TClass::StaticConstructor \
+ 		); \
+ 		extern "C" DLL_EXPORT UClass* autoclass##TClass;\
+ 		DLL_EXPORT UClass* autoclass##TClass = TClass::StaticClass();
+diff --git a/Core/Inc/UnVcWin32.h b/Core/Inc/UnVcWin32.h
+index aab209e..fbc0d62 100644
+--- a/Core/Inc/UnVcWin32.h
++++ b/Core/Inc/UnVcWin32.h
+@@ -264,7 +264,7 @@ extern "C"
+ /*----------------------------------------------------------------------------
+ 	Functions.
+ ----------------------------------------------------------------------------*/
+-
++#if 0
+ // __rdtsc is in windows.h, which apparently can't be #included here. --ryan.
+ #if _WIN64
+ extern "C" QWORD __rdtsc(void);
+@@ -292,6 +292,7 @@ FORCEINLINE QWORD __rdtsc(void)
+ 	return(largeint.QuadPart);
+ }
+ #endif
++#endif
+ 
+ 
+ // Intel SpeedStep and AMD Cool & Quiet CPUs automatically adjust their frequency so RDTSC 
+diff --git a/Engine/Src/UnModelLight.cpp b/Engine/Src/UnModelLight.cpp
+index 2a1513a..cb60439 100644
+--- a/Engine/Src/UnModelLight.cpp
++++ b/Engine/Src/UnModelLight.cpp
+@@ -1285,7 +1285,7 @@ void UModel::Illuminate(AActor* Owner,UBOOL ChangedOnly)
+ //
+ //	DXT compress hacks.
+ //
+-#if _MSC_VER && !_XBOX && !_WIN64
++#if _MSC_VER && !_XBOX && !_WIN64 && WITH_DXTLIB
+ #pragma pack (push,8)
+ typedef long HRESULT; 
+ #include "../../nvDXT/Inc/dxtlib.h"
+@@ -1310,7 +1310,7 @@ static HRESULT LightMapCompressionCallback(void* Data,INT MipIndex,DWORD Size,IN
+ void UModel::CompressLightmaps()
+ {
+ 	guard(UModel::CompressLightmaps);
+-#if !CONSOLE && !__UNIX__ && !_WIN64
++#if !CONSOLE && !__UNIX__ && !_WIN64 && WITH_DXTLIB
+ 	GWarn->BeginSlowTask(TEXT("Compressing lightmaps..."),1);
+ 	for(INT TextureIndex = 0;TextureIndex < LightMapTextures.Num();TextureIndex++)
+ 	{
+diff --git a/Engine/Src/UnTex.cpp b/Engine/Src/UnTex.cpp
+index f7b6e8f..9529a79 100644
+--- a/Engine/Src/UnTex.cpp
++++ b/Engine/Src/UnTex.cpp
+@@ -14,7 +14,7 @@
+ 
+ #include "EnginePrivate.h"
+ 
+-#if _MSC_VER && !_XBOX && !_WIN64
++#if _MSC_VER && !_XBOX && !_WIN64 && WITH_DXTLIB
+ #pragma pack (push,8)
+ typedef long HRESULT; 
+ #include "../../nvDXT/Inc/dxtlib.h"
+@@ -952,7 +952,7 @@ UPalette* UPalette::ReplaceWithExisting()
+ -----------------------------------------------------------------------------*/
+ 
+ // Hacks required by nvDXT library...
+-#if _MSC_VER && !_XBOX && !_WIN64
++#if _MSC_VER && !_XBOX && !_WIN64 && WITH_DXTLIB
+ static UTexture* CurrentTexture = NULL;
+ 
+ static HRESULT CompressionCallback(void * Data, INT MipIndex, DWORD Size, INT Width, INT Height, void* UserData )
+@@ -977,7 +977,7 @@ void ReadDTXnFile (DWORD count, void *buffer)
+ UBOOL UTexture::Compress( ETextureFormat InFormat, UBOOL Mipmaps, FDXTCompressionOptions* Options )
+ {
+ 	guard(UTexture::Compress);
+-#if _MSC_VER && !_XBOX && !_WIN64
++#if _MSC_VER && !_XBOX && !_WIN64 && WITH_DXTLIB
+ 	// Only compresses to DXTx
+ 	TextureFormatTypes TextureFormat;
+ 	switch( InFormat )
+diff --git a/Engine/Src/xForceFeedback.cpp b/Engine/Src/xForceFeedback.cpp
+index 385dfa2..6d92d54 100644
+--- a/Engine/Src/xForceFeedback.cpp
++++ b/Engine/Src/xForceFeedback.cpp
+@@ -14,6 +14,10 @@
+ #undef __IFC__
+ #endif
+ 
++#if WITHOUT_IFC
++#undef __IFC__
++#endif
++
+ int GForceFeedbackAvailable = 0;
+ 
+ #ifdef __IFC__
+diff --git a/Setup/Src/Setup.cpp b/Setup/Src/Setup.cpp
+index c449150..fce69f6 100644
+--- a/Setup/Src/Setup.cpp
++++ b/Setup/Src/Setup.cpp
+@@ -332,7 +332,7 @@ class WFailedRequirement : public WDialog
+ 	WFailedRequirement( WWindow* InOwnerWindow, USetupDefinition* Manager, USetupProduct* InProduct, const TCHAR* InTitle, const TCHAR* InMessage )
+ 	: WDialog	  ( TEXT("FailedRequirement"), IDDIALOG_FailedRequirement, InOwnerWindow )
+ 	, FailedText  ( this, IDC_FailedMessage )
+-	, OkButton    ( this, IDOK, FDelegate(this,(TDelegate)EndDialogTrue) )
++	, OkButton    ( this, IDOK, FDelegate(this,(TDelegate)&WFailedRequirement::EndDialogTrue) )
+ 	, ProductInfo ( this, Manager, InProduct )
+ 	, Title       ( InTitle )
+ 	, Message     ( InMessage )
+@@ -645,7 +645,7 @@ class WFilerPageCdFolder : public WWizardPage, public FControlSnoop
+ 	, Manager          ( InOwner->Manager )
+ 	, FolderDescription( this, IDC_FolderDescription )
+ 	, FolderHolder     ( this, IDC_FolderHolder )
+-	, DefaultButton    ( this, IDC_Default, FDelegate(this,(TDelegate)OnReset) )
++	, DefaultButton    ( this, IDC_Default, FDelegate(this,(TDelegate)&WFilerPageCdFolder::OnReset) )
+ 	, Folder           ( this, IDC_Folder )
+ 	, SpaceAvailable   ( this, IDC_SpaceAvailable )
+ 	, SpaceAvailableMsg( this, IDC_SpaceAvailableMessage )
+@@ -664,7 +664,7 @@ class WFilerPageCdFolder : public WWizardPage, public FControlSnoop
+ 		FString Saved      = Manager->RefPath;
+ 		Manager->CdOk      = TEXT("");
+ 		Manager->RefPath   = Folder.GetText();
+-		Manager->InstallTree( TEXT("ProcessVerifyCd"), &GNoPoll, USetupDefinition::ProcessVerifyCd );
++		Manager->InstallTree( TEXT("ProcessVerifyCd"), &GNoPoll, &USetupDefinition::ProcessVerifyCd );
+ 		if( Manager->CdOk!=TEXT("") )
+ 		{
+ 			MessageBox( *Owner, *FString::Printf(LineFormat(LocalizeError(TEXT("WrongCd"),TEXT("Setup"))),*Manager->Product,*Manager->CdOk), LocalizeError(TEXT("WrongCdTitle"),TEXT("Setup")), MB_OK );
+@@ -688,7 +688,7 @@ class WFilerPageCdFolder : public WWizardPage, public FControlSnoop
+ 
+ 		// Only show if there are installable files stored as deltas relative to version on CD.
+ 		Manager->AnyRef = 0;
+-		Manager->InstallTree( TEXT("ProcessCheckRef"), &GNoPoll, USetupDefinition::ProcessCheckRef );
++		Manager->InstallTree( TEXT("ProcessCheckRef"), &GNoPoll, &USetupDefinition::ProcessCheckRef );
+ 		return Manager->AnyRef;
+ 
+ 		unguard;
+@@ -836,7 +836,7 @@ class WFilerPageFolder : public WWizardPage, public FControlSnoop
+ 	, Manager          ( InOwner->Manager )
+ 	, FolderDescription( this, IDC_FolderDescription )
+ 	, FolderHolder     ( this, IDC_FolderHolder )
+-	, DefaultButton    ( this, IDC_Default, FDelegate(this,(TDelegate)OnReset) )
++	, DefaultButton    ( this, IDC_Default, FDelegate(this,(TDelegate)&WFilerPageFolder::OnReset) )
+ 	, Folder           ( this, IDC_Folder )
+ 	, SpaceAvailable   ( this, IDC_SpaceAvailable )
+ 	, SpaceRequired    ( this, IDC_SpaceRequired )
+@@ -903,7 +903,7 @@ class WFilerPageFolder : public WWizardPage, public FControlSnoop
+ 		WWizardPage::OnInitDialog();
+ 		FolderDescription.SetText( *FString::Printf(LineFormat(Localize(TEXT("IDDIALOG_FilerPageFolder"),Manager->Patch ? TEXT("IDC_FolderDescriptionPatch") : TEXT("IDC_FolderDescription"),TEXT("Setup"))), Manager->LocalProduct ) );
+ 		OnReset();
+-		Folder.ChangeDelegate=FDelegate(this,(TDelegate)OnChange);
++		Folder.ChangeDelegate=FDelegate(this,(TDelegate)&WFilerPageFolder::OnChange);
+ 		unguard;
+ 	}
+ 	void OnChange()
+@@ -1119,7 +1119,7 @@ class WFilerPageWelcome : public WWizardPage
+ 	, LanguageList  ( this, IDC_LanguageList )
+ 	{
+ 		guard(WFilerPageWelcome::WFilerPageWelcome);
+-		LanguageList.SelectionChangeDelegate = FDelegate(this,(TDelegate)OnUserChangeLanguage);
++		LanguageList.SelectionChangeDelegate = FDelegate(this,(TDelegate)&WFilerPageWelcome::OnUserChangeLanguage);
+ 		unguard;
+ 	}
+ 
+@@ -1390,11 +1390,11 @@ class WFilerPageAutoPlay : public WWizardPage
+ 	, Owner             ( InOwner )
+ 	, Manager           ( InOwner->Manager )
+ 	, Options           ( this, IDC_Options )
+-	, PlayButton        ( this, IDC_Play,         FDelegate(this,(TDelegate)OnPlay),         CBFF_ShowOver|CBFF_UrlStyle )
+-	, ReleaseNotesButton( this, IDC_ReleaseNotes, FDelegate(this,(TDelegate)OnReleaseNotes), CBFF_ShowOver|CBFF_UrlStyle )
+-	, WebButton         ( this, IDC_Web,          FDelegate(this,(TDelegate)OnWeb),          CBFF_ShowOver|CBFF_UrlStyle )
+-	, ReinstallButton   ( this, IDC_Reinstall,    FDelegate(this,(TDelegate)OnInstall),      CBFF_ShowOver|CBFF_UrlStyle )
+-	, UninstallButton   ( this, IDC_Uninstall,    FDelegate(this,(TDelegate)OnUninstall),    CBFF_ShowOver|CBFF_UrlStyle )
++	, PlayButton        ( this, IDC_Play,         FDelegate(this,(TDelegate)&WFilerPageAutoPlay::OnPlay),         CBFF_ShowOver|CBFF_UrlStyle )
++	, ReleaseNotesButton( this, IDC_ReleaseNotes, FDelegate(this,(TDelegate)&WFilerPageAutoPlay::OnReleaseNotes), CBFF_ShowOver|CBFF_UrlStyle )
++	, WebButton         ( this, IDC_Web,          FDelegate(this,(TDelegate)&WFilerPageAutoPlay::OnWeb),          CBFF_ShowOver|CBFF_UrlStyle )
++	, ReinstallButton   ( this, IDC_Reinstall,    FDelegate(this,(TDelegate)&WFilerPageAutoPlay::OnInstall),      CBFF_ShowOver|CBFF_UrlStyle )
++	, UninstallButton   ( this, IDC_Uninstall,    FDelegate(this,(TDelegate)&WFilerPageAutoPlay::OnUninstall),    CBFF_ShowOver|CBFF_UrlStyle )
+ 	, CompleteLabel     ( this, IDC_Complete )
+ 	, CompleteFrame     ( this, IDC_Divider )
+ 	, ShowInstallOptions( InShowInstallOptions )
+diff --git a/Setup/Src/USetupDefinition.cpp b/Setup/Src/USetupDefinition.cpp
+index 9dde587..f24b4bf 100644
+--- a/Setup/Src/USetupDefinition.cpp
++++ b/Setup/Src/USetupDefinition.cpp
+@@ -475,10 +475,10 @@ void USetupDefinition::DoInstallSteps( FInstallPoll* Poll )
+ 	// Handle all install steps.
+ 	BeginSteps();
+ 	TotalBytes = 0;
+-	InstallTree( TEXT("ProcessPreCopy"),  Poll, (INSTALL_STEP)ProcessPreCopy  );
+-	InstallTree( TEXT("ProcessCopy"),     Poll, (INSTALL_STEP)ProcessCopy     );
+-	InstallTree( TEXT("ProcessExtra"),    Poll, (INSTALL_STEP)ProcessExtra    );
+-	InstallTree( TEXT("ProcessPostCopy"), Poll, (INSTALL_STEP)ProcessPostCopy );
++	InstallTree( TEXT("ProcessPreCopy"),  Poll, (INSTALL_STEP)&USetupDefinition::ProcessPreCopy  );
++	InstallTree( TEXT("ProcessCopy"),     Poll, (INSTALL_STEP)&USetupDefinition::ProcessCopy     );
++	InstallTree( TEXT("ProcessExtra"),    Poll, (INSTALL_STEP)&USetupDefinition::ProcessExtra    );
++	InstallTree( TEXT("ProcessPostCopy"), Poll, (INSTALL_STEP)&USetupDefinition::ProcessPostCopy );
+ 	Exists = FolderExists = 1;
+ 	RegistryFolder = DestPath;
+ 	if( IsMasterProduct )
+@@ -507,8 +507,8 @@ void USetupDefinition::DoUninstallSteps( FInstallPoll* Poll )
+ 	// Handle all uninstall steps.
+ 	BeginSteps();
+ 	UninstallTotal=0, UninstallCount=0;
+-	UninstallTree( TEXT("ProcessUninstallCountTotal"), Poll, ProcessUninstallCountTotal );
+-	UninstallTree( TEXT("ProcessUninstallRemove"),     Poll, ProcessUninstallRemove );
++	UninstallTree( TEXT("ProcessUninstallCountTotal"), Poll, &USetupDefinition::ProcessUninstallCountTotal );
++	UninstallTree( TEXT("ProcessUninstallRemove"),     Poll, &USetupDefinition::ProcessUninstallRemove );
+ 	TMultiMap<FString,FString>* Map = GConfig->GetSectionPrivate( TEXT("Setup"), 0, 0, *(DestPath * TEXT("System") * SETUP_INI) );
+ 	for( TArray<USetupGroup*>::TIterator GroupIt(UninstallComponents); GroupIt; ++GroupIt )
+ 	{
+diff --git a/Setup/Src/USetupDefinitionWindows.cpp b/Setup/Src/USetupDefinitionWindows.cpp
+index cdb5250..bfcf4d5 100644
+--- a/Setup/Src/USetupDefinitionWindows.cpp
++++ b/Setup/Src/USetupDefinitionWindows.cpp
+@@ -643,8 +643,8 @@ IMPLEMENT_CLASS(USetupDefinitionWindows);
+ WCDPromptDialog::WCDPromptDialog( WWindow* InOwnerWindow, USetupDefinition* Manager, const TCHAR* InTitle, const TCHAR* InMessage )
+ : WDialog	  ( TEXT("CDPrompt"), IDDIALOG_CDPrompt, InOwnerWindow )
+ , CDPromptText( this, IDC_CDPromptMessage )
+-, OkButton    ( this, IDOK, FDelegate(this,(TDelegate)EndDialogTrue) )
+-, CancelButton( this, IDCANCEL, FDelegate(this,(TDelegate)EndDialogFalse) )
++, OkButton    ( this, IDOK, FDelegate(this,(TDelegate)&WCDPromptDialog::EndDialogTrue) )
++, CancelButton( this, IDCANCEL, FDelegate(this,(TDelegate)&WCDPromptDialog::EndDialogFalse) )
+ , Title       ( InTitle )
+ , Message     ( InMessage )
+ {}
+diff --git a/Speech/Inc/sphelper.h b/Speech/Inc/sphelper.h
+index d59a9bc..7afccdd 100644
+--- a/Speech/Inc/sphelper.h
++++ b/Speech/Inc/sphelper.h
+@@ -766,7 +766,7 @@ inline HRESULT SpFindBestToken(
+     HRESULT hr = S_OK;
+     
+     const WCHAR *pszVendorPreferred = L"VendorPreferred";
+-    const ulLenVendorPreferred = wcslen(pszVendorPreferred);
++    const int ulLenVendorPreferred = wcslen(pszVendorPreferred);
+ 
+     // append VendorPreferred to the end of pszOptAttribs to force this preference
+     ULONG ulLen = pszOptAttribs ? wcslen(pszOptAttribs) + ulLenVendorPreferred + 1 : ulLenVendorPreferred;
+@@ -1415,7 +1415,7 @@ public:
+     WAVEFORMATEX  * m_pCoMemWaveFormatEx; 
+ 
+ 
+-    static CoMemCopyWFEX(const WAVEFORMATEX * pSrc, WAVEFORMATEX ** ppCoMemWFEX)
++    static int CoMemCopyWFEX(const WAVEFORMATEX * pSrc, WAVEFORMATEX ** ppCoMemWFEX)
+     {
+         ULONG cb = sizeof(WAVEFORMATEX) + pSrc->cbSize;
+         *ppCoMemWFEX = (WAVEFORMATEX *)::CoTaskMemAlloc(cb);
+diff --git a/System/CacheRecords.ucl b/System/CacheRecords.ucl
+index c9e2f5cf23259f53e8f032277821fb0b734065c9..44c72a48230646d9c08d82442ad0037f722b500f 100644
+GIT binary patch
+delta 21
+dcmaEGhU?p2u7)j)|K_x3EMeT9v4rUdBLIGj3Y7o=
+
+delta 815
+zcmZ`%L2DC16n;;v)RYiQ?I~c^LJ<!JQ(F+09#%b7M5XcMAxyVvT)Uf1chi<!O!eZm
+zIEA^a6fgFwQt%|yqs2q}0|dc8;Hh{De)D3mw#c$OZ{NK4ecya<jy~nSf6Z;|axcq!
+zlu$s66yu4Ex5KX4{K9i1$MR;>=aSxgd+Fa|%|{J$eT#D=#}T5NTr|)2xpflZaW?^l
+z0+mB`YGO?hJwcq{EhBd5KJp=T5Vd8;p{KNpxDAO-Y9OCd3$g96-7ziUtFTj-zfjO4
+z*;P`}K)*sgSkD1Crd9p0I<9xOFXYQ0wY18L(Qkf?6@0|0KncBmzdc^G%@({Zb<2oS
+zkrq;DDvBq~yNu7C|Lfpk#@EI?6!~bgr?l`sb*#0sdg9dtPwADllG)qg;n7od`g!1*
+zpRf61-k~aZ0@#s~(w`TKVs+sJu2K8E+;wRNC%Fx!F|C8H1|yg7Jp~U3T$)C$2i!#n
+zT!6epB)W71`FlV}fY7(QM)Pv+1YJ|oWv#E#9aKe9qwHu*p~XW(E>);(E`Q^zX5+(u
+z&Q{U~FQ&V<Kxk(gim@@RVNGCcRm5~4EWp$vWPId1Fu<B0;=fNin0*tO!9AG=h7VcR
+yaYv3}<G~HNEB*G8gC|E1umk|Bn~LGdeBaYQlhWR!D`wO1@XKDtAA8xEU;G<ZNWC5a
+
+diff --git a/UnrealEd/Inc/BottomBarStandard.h b/UnrealEd/Inc/BottomBarStandard.h
+index 1a430e2..0a334ed 100644
+--- a/UnrealEd/Inc/BottomBarStandard.h
++++ b/UnrealEd/Inc/BottomBarStandard.h
+@@ -237,7 +237,7 @@ class WBottomBarStandard : public WWindow
+ 		LogCommandCombo = new WComboBox( this, IDCB_LOG_COMMAND );
+ 		LogCommandCombo->OpenWindow( 1, 0, CBS_DROPDOWN );
+ 		LogCommandCombo->MoveWindow( 0, 0, 32, 32, 1);
+-		LogCommandCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnLogCommandSelChange);
++		LogCommandCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WBottomBarStandard::OnLogCommandSelChange);
+ 
+ 		// We subclass the edit control inside of the combobox so we can catch events that
+ 		// are normally invisible to us ... like the user pressing ENTER.
+@@ -294,7 +294,7 @@ class WBottomBarStandard : public WWindow
+ 		DragGridSizeCombo->AddString( TEXT("1024") );
+ 		DragGridSizeCombo->AddString( TEXT("2048") );
+ 		DragGridSizeCombo->AddString( TEXT("4096") );
+-		DragGridSizeCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnDragGridSizeSelChange);
++		DragGridSizeCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WBottomBarStandard::OnDragGridSizeSelChange);
+ 
+ 		new(PictureButtons)WPictureButton( this );
+ 		RotGridCheck = &(PictureButtons(PictureButtons.Num() - 1));	check(RotGridCheck);
+@@ -321,15 +321,15 @@ class WBottomBarStandard : public WWindow
+ 
+         DrawScale3DEdits[0] = new WEdit( this, IDEC_DRAW_SCALE_3D_X );
+ 		DrawScale3DEdits[0]->OpenWindow( 1, 0, 0 );
+-		DrawScale3DEdits[0]->BlurDelegate = FDelegate(this,(TDelegate)ApplyDrawScale3D);
++		DrawScale3DEdits[0]->BlurDelegate = FDelegate(this,(TDelegate)&WBottomBarStandard::ApplyDrawScale3D);
+ 
+         DrawScale3DEdits[1] = new WEdit( this, IDEC_DRAW_SCALE_3D_Y );
+ 		DrawScale3DEdits[1]->OpenWindow( 1, 0, 0 );
+-		DrawScale3DEdits[1]->BlurDelegate = FDelegate(this,(TDelegate)ApplyDrawScale3D);
++		DrawScale3DEdits[1]->BlurDelegate = FDelegate(this,(TDelegate)&WBottomBarStandard::ApplyDrawScale3D);
+ 
+         DrawScale3DEdits[2] = new WEdit( this, IDEC_DRAW_SCALE_3D_Z );
+ 		DrawScale3DEdits[2]->OpenWindow( 1, 0, 0 );
+-		DrawScale3DEdits[2]->BlurDelegate = FDelegate(this,(TDelegate)ApplyDrawScale3D);
++		DrawScale3DEdits[2]->BlurDelegate = FDelegate(this,(TDelegate)&WBottomBarStandard::ApplyDrawScale3D);
+ 
+ 		lpfnEditWndProcDrawScale3D = (WNDPROC)SetWindowLongA(DrawScale3DEdits[0]->hWnd, GWL_WNDPROC, (LONG)DrawScale3DEdit_Proc);
+ 		check(lpfnEditWndProcDrawScale3D);
+diff --git a/UnrealEd/Inc/BrowserActor.h b/UnrealEd/Inc/BrowserActor.h
+index f855b60..5a4eb08 100644
+--- a/UnrealEd/Inc/BrowserActor.h
++++ b/UnrealEd/Inc/BrowserActor.h
+@@ -74,8 +74,8 @@ class WDlgNewClass : public WDialog
+ 	// Constructor.
+ 	WDlgNewClass( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog			( TEXT("New Class"), IDDIALOG_NEW_CLASS, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)OnCancel) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgNewClass::OnOk) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgNewClass::OnCancel) )
+ 	,	ParentLabel		( this, IDSC_PARENT )
+ 	,	PackageEdit		( this, IDEC_PACKAGE )
+ 	,	NameEdit		( this, IDEC_NAME )
+@@ -242,23 +242,23 @@ class WBrowserActor : public WBrowser
+ 
+ 		PackagesCombo = new WComboBox( this, IDCB_PACKAGE );
+ 		PackagesCombo->OpenWindow( 0, 1 ); // !!this is invisible temporarily
+-		PackagesCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnPackagesComboSelChange);
++		PackagesCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserActor::OnPackagesComboSelChange);
+ 
+ 		ObjectsCheck = new WCheckBox( this, IDCK_OBJECTS );
+-		ObjectsCheck->ClickDelegate = FDelegate(this, (TDelegate)OnObjectsClick);
++		ObjectsCheck->ClickDelegate = FDelegate(this, (TDelegate)&WBrowserActor::OnObjectsClick);
+ 		ObjectsCheck->OpenWindow( 1, 0, 0, 1, 1, TEXT("Use 'Actor' as Parent?") );
+ 		SendMessageX( ObjectsCheck->hWnd, BM_SETCHECK, BST_CHECKED, 0 );
+ 
+ 		PlaceableCheck = new WCheckBox( this, IDCK_OBJECTS );
+-		PlaceableCheck->ClickDelegate = FDelegate(this, (TDelegate)OnPlaceableClick);
++		PlaceableCheck->ClickDelegate = FDelegate(this, (TDelegate)&WBrowserActor::OnPlaceableClick);
+ 		PlaceableCheck->OpenWindow( 1, 0, 0, 1, 1, TEXT("Placeable classes Only?") );
+ 		SendMessageX( PlaceableCheck->hWnd, BM_SETCHECK, BST_CHECKED, 0 );
+ 
+ 		TreeView = new WTreeView( this, IDTV_TREEVIEW );
+ 		TreeView->OpenWindow( 1, 1, 0, 0, 1 );
+-		TreeView->SelChangedDelegate = FDelegate(this, (TDelegate)OnTreeViewSelChanged);
+-		TreeView->ItemExpandingDelegate = FDelegate(this, (TDelegate)OnTreeViewItemExpanding);
+-		TreeView->DblClkDelegate = FDelegate(this, (TDelegate)OnTreeViewDblClk);
++		TreeView->SelChangedDelegate = FDelegate(this, (TDelegate)&WBrowserActor::OnTreeViewSelChanged);
++		TreeView->ItemExpandingDelegate = FDelegate(this, (TDelegate)&WBrowserActor::OnTreeViewItemExpanding);
++		TreeView->DblClkDelegate = FDelegate(this, (TDelegate)&WBrowserActor::OnTreeViewDblClk);
+ 		
+ 		PackagesList = new WCheckListBox( this, IDLB_PACKAGES );
+ 		PackagesList->OpenWindow( 1, 0, 0, 1 );
+diff --git a/UnrealEd/Inc/BrowserGroup.h b/UnrealEd/Inc/BrowserGroup.h
+index 393bc1a..c87a7e4 100644
+--- a/UnrealEd/Inc/BrowserGroup.h
++++ b/UnrealEd/Inc/BrowserGroup.h
+@@ -32,8 +32,8 @@ class WDlgGroup : public WDialog
+ 	// Constructor.
+ 	WDlgGroup( UObject* InContext, WBrowser* InOwnerWindow )
+ 	:	WDialog			( TEXT("Group"), IDDIALOG_GROUP, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgGroup::OnOk) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgGroup::EndDialogFalse) )
+ 	,	NameEdit		( this, IDEC_NAME )
+ 	{
+ 	}
+diff --git a/UnrealEd/Inc/BrowserMaster.h b/UnrealEd/Inc/BrowserMaster.h
+index f1b5cda..4c88c86 100644
+--- a/UnrealEd/Inc/BrowserMaster.h
++++ b/UnrealEd/Inc/BrowserMaster.h
+@@ -93,7 +93,7 @@ class WBrowserMaster : public WBrowser
+ 
+ 		BrowserTabs = new WTabControl( this, IDCB_BROWSER );
+ 		BrowserTabs->OpenWindow( 1 );
+-		BrowserTabs->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnBrowserTabSelChange);
++		BrowserTabs->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserMaster::OnBrowserTabSelChange);
+ 
+ 		PositionChildControls();
+ 
+diff --git a/UnrealEd/Inc/BrowserMesh.h b/UnrealEd/Inc/BrowserMesh.h
+index 73594c7..a2d3571 100644
+--- a/UnrealEd/Inc/BrowserMesh.h
++++ b/UnrealEd/Inc/BrowserMesh.h
+@@ -98,16 +98,16 @@ class WBrowserMesh : public WBrowser
+ 		AnimList->OpenWindow( 1, 0, 0, 0, 0, WS_VSCROLL );
+ 
+ 		SendMessageX( AnimList->hWnd, LB_SETCOLUMNWIDTH, 96, 0 );
+-		MeshCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnMeshSelectionChange);
+-		AnimList->DoubleClickDelegate = FDelegate(this,(TDelegate)OnAnimDoubleClick);
+-		AnimList->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnAnimSelectionChange);
++		MeshCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WBrowserMesh::OnMeshSelectionChange);
++		AnimList->DoubleClickDelegate = FDelegate(this,(TDelegate)&WBrowserMesh::OnAnimDoubleClick);
++		AnimList->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WBrowserMesh::OnAnimSelectionChange);
+ 
+ 		AnimFrameBar = new WTrackBar( this, IDTB_ANIMFRAMES );
+ 		AnimFrameBar->OpenWindow( 1, 0 );
+ 		AnimFrameBar->SetTicFreq( 1000 );
+ 		AnimFrameBar->SetRange( 1, 10000 );
+-		AnimFrameBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)OnSliderMove ); 
+-		AnimFrameBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)OnSliderMove );    
++		AnimFrameBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)&WBrowserMesh::OnSliderMove ); 
++		AnimFrameBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)&WBrowserMesh::OnSliderMove );    
+ 
+ 		// Create the mesh viewport
+ 		//
+diff --git a/UnrealEd/Inc/BrowserMusic.h b/UnrealEd/Inc/BrowserMusic.h
+index cbe4762..6d7dfe6 100644
+--- a/UnrealEd/Inc/BrowserMusic.h
++++ b/UnrealEd/Inc/BrowserMusic.h
+@@ -36,10 +36,10 @@ class WDlgImportMusic : public WDialog
+ 	// Constructor.
+ 	WDlgImportMusic( UObject* InContext, WBrowser* InOwnerWindow )
+ 	:	WDialog			( TEXT("Import Music"), IDDIALOG_IMPORT_MUSIC, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	OkAllButton		( this, IDPB_OKALL,		FDelegate(this,(TDelegate)OnOkAll) )
+-	,	SkipButton		( this, IDPB_SKIP,		FDelegate(this,(TDelegate)OnSkip) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgImportMusic::OnOk) )
++	,	OkAllButton		( this, IDPB_OKALL,		FDelegate(this,(TDelegate)&WDlgImportMusic::OnOkAll) )
++	,	SkipButton		( this, IDPB_SKIP,		FDelegate(this,(TDelegate)&WDlgImportMusic::OnSkip) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgImportMusic::EndDialogFalse) )
+ 	,	NameEdit		( this, IDEC_NAME )
+ 	,	FilenameStatic	( this, IDSC_FILENAME )
+ 	{
+@@ -228,7 +228,7 @@ class WBrowserMusic : public WBrowser
+ 
+ 		pListMusic = new WListBox( this, IDLB_MUSIC );
+ 		pListMusic->OpenWindow( 1, 0, 0, 0, 1 );
+-		pListMusic->DoubleClickDelegate = FDelegate(this, (TDelegate)OnListMusicDblClick);
++		pListMusic->DoubleClickDelegate = FDelegate(this, (TDelegate)&WBrowserMusic::OnListMusicDblClick);
+ 
+ 		hWndToolBar = CreateToolbarEx( 
+ 			hWnd, WS_CHILD | WS_BORDER | WS_VISIBLE | CCS_ADJUSTABLE,
+diff --git a/UnrealEd/Inc/BrowserPrefab.h b/UnrealEd/Inc/BrowserPrefab.h
+index b3b2848..dd62607 100644
+--- a/UnrealEd/Inc/BrowserPrefab.h
++++ b/UnrealEd/Inc/BrowserPrefab.h
+@@ -38,8 +38,8 @@ class WDlgNewPrefab : public WDialog
+ 	// Constructor.
+ 	WDlgNewPrefab( UObject* InContext, WBrowser* InOwnerWindow )
+ 		:	WDialog			( TEXT("New Prefab"), IDDIALOG_NEW_PREFAB, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgNewPrefab::OnOk) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgNewPrefab::EndDialogFalse) )
+ 	,	PackageEdit		( this, IDEC_PACKAGE )
+ 	,	GroupEdit		( this, IDEC_GROUP )
+ 	,	NameEdit		( this, IDEC_NAME )
+@@ -127,10 +127,10 @@ class WDlgImportPrefab : public WDialog
+ 	// Constructor.
+ 	WDlgImportPrefab( UObject* InContext, WBrowser* InOwnerWindow )
+ 	:	WDialog			( TEXT("Import Prefab"), IDDIALOG_IMPORT_PREFAB, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	OkAllButton		( this, IDPB_OKALL,		FDelegate(this,(TDelegate)OnOkAll) )
+-	,	SkipButton		( this, IDPB_SKIP,		FDelegate(this,(TDelegate)OnSkip) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgImportPrefab::OnOk) )
++	,	OkAllButton		( this, IDPB_OKALL,		FDelegate(this,(TDelegate)&WDlgImportPrefab::OnOkAll) )
++	,	SkipButton		( this, IDPB_SKIP,		FDelegate(this,(TDelegate)&WDlgImportPrefab::OnSkip) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgImportPrefab::EndDialogFalse) )
+ 	,	PackageEdit		( this, IDEC_PACKAGE )
+ 	,	GroupEdit		( this, IDEC_GROUP )
+ 	,	NameEdit		( this, IDEC_NAME )
+@@ -359,15 +359,15 @@ class WBrowserPrefab : public WBrowser
+ 		ViewportLabel->OpenWindow( 1, 0 );
+ 		PackageCombo = new WComboBox( this, IDCB_PACKAGE );
+ 		PackageCombo->OpenWindow( 1, 1 );
+-		PackageCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnPackageComboSelChange);
++		PackageCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserPrefab::OnPackageComboSelChange);
+ 		GroupCombo = new WComboBox( this, IDCB_GROUP );
+ 		GroupCombo->OpenWindow( 1, 1 );
+-		GroupCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnGroupComboSelChange);
+-		GroupAllCheck = new WCheckBox( this, IDCK_GRP_ALL, FDelegate(this, (TDelegate)OnGroupAllClick) );
++		GroupCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserPrefab::OnGroupComboSelChange);
++		GroupAllCheck = new WCheckBox( this, IDCK_GRP_ALL, FDelegate(this, (TDelegate)&WBrowserPrefab::OnGroupAllClick) );
+ 		GroupAllCheck->OpenWindow( 1, 0, 0, 1, 1, TEXT("All"), 1, 0, BS_PUSHLIKE );
+ 		PrefabsList = new WListBox( this, IDLB_PREFABS );
+ 		PrefabsList->OpenWindow( 1, 0, 0, 0, 0, WS_VSCROLL );
+-		PrefabsList->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnPrefabSelChange);
++		PrefabsList->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserPrefab::OnPrefabSelChange);
+ 
+ 		RefreshLevel();
+ 
+diff --git a/UnrealEd/Inc/BrowserSound.h b/UnrealEd/Inc/BrowserSound.h
+index 1e40f46..57344aa 100644
+--- a/UnrealEd/Inc/BrowserSound.h
++++ b/UnrealEd/Inc/BrowserSound.h
+@@ -42,10 +42,10 @@ class WDlgImportSound : public WDialog
+ 	// Constructor.
+ 	WDlgImportSound( UObject* InContext, WBrowser* InOwnerWindow )
+ 	:	WDialog			( TEXT("Import Sound"), IDDIALOG_IMPORT_SOUND, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	OkAllButton		( this, IDPB_OKALL,		FDelegate(this,(TDelegate)OnOkAll) )
+-	,	SkipButton		( this, IDPB_SKIP,		FDelegate(this,(TDelegate)OnSkip) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgImportSound::OnOk) )
++	,	OkAllButton		( this, IDPB_OKALL,		FDelegate(this,(TDelegate)&WDlgImportSound::OnOkAll) )
++	,	SkipButton		( this, IDPB_SKIP,		FDelegate(this,(TDelegate)&WDlgImportSound::OnSkip) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgImportSound::EndDialogFalse) )
+ 	,	PackageEdit		( this, IDEC_PACKAGE )
+ 	,	GroupEdit		( this, IDEC_GROUP )
+ 	,	NameEdit		( this, IDEC_NAME )
+@@ -240,8 +240,8 @@ class WDlgNewSound : public WDialog
+ 	// Constructor.
+ 	WDlgNewSound( UObject* InContext, WBrowser* InOwnerWindow )
+ 	:	WDialog			( TEXT("New Sound"), IDDIALOG_NEW_SOUND, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgNewSound::OnOk) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgNewSound::EndDialogFalse) )
+ 	,	PackageEdit		( this, IDEC_PACKAGE )
+ 	,	GroupEdit		( this, IDEC_GROUP )
+ 	,	NameEdit		( this, IDEC_NAME )
+@@ -388,27 +388,27 @@ class WBrowserSound : public WBrowser
+ 		//
+ 		pComboPackage = new WComboBox( this, IDCB_PACKAGE );
+ 		pComboPackage->OpenWindow( 1, 1 );
+-		pComboPackage->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnComboPackageSelChange);
++		pComboPackage->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserSound::OnComboPackageSelChange);
+ 
+ 		// GROUP
+ 		//
+ 		pComboGroup = new WComboBox( this, IDCB_GROUP );
+ 		pComboGroup->OpenWindow( 1, 1 );
+-		pComboGroup->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnComboGroupSelChange);
++		pComboGroup->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserSound::OnComboGroupSelChange);
+ 
+ 		// SOUND LIST
+ 		//
+ 		pListSounds = new WListBox( this, IDLB_SOUNDS );
+ 		pListSounds->OpenWindow( 1, 0, 0, 0, 1 );
+-		pListSounds->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnListSoundsSelectionChange);
+-		pListSounds->DoubleClickDelegate = FDelegate(this, (TDelegate)OnListSoundsDblClick);
++		pListSounds->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserSound::OnListSoundsSelectionChange);
++		pListSounds->DoubleClickDelegate = FDelegate(this, (TDelegate)&WBrowserSound::OnListSoundsDblClick);
+         // gam ---
+-		pListSounds->RightClickDelegate = FDelegate(this, (TDelegate)OnListSoundsRightClick);
++		pListSounds->RightClickDelegate = FDelegate(this, (TDelegate)&WBrowserSound::OnListSoundsRightClick);
+         // --- gam
+ 
+ 		// CHECK BOXES
+ 		//
+-		pCheckGroupAll = new WCheckBox( this, IDCK_GRP_ALL, FDelegate(this, (TDelegate)OnGroupAllClick) );
++		pCheckGroupAll = new WCheckBox( this, IDCK_GRP_ALL, FDelegate(this, (TDelegate)&WBrowserSound::OnGroupAllClick) );
+ 		pCheckGroupAll->OpenWindow( 1, 0, 0, 1, 1, TEXT("All"), 1, 0, BS_PUSHLIKE );
+ 
+ 		hWndToolBar = CreateToolbarEx( 
+diff --git a/UnrealEd/Inc/BrowserStaticMesh.h b/UnrealEd/Inc/BrowserStaticMesh.h
+index 37f6190..7b56b18 100644
+--- a/UnrealEd/Inc/BrowserStaticMesh.h
++++ b/UnrealEd/Inc/BrowserStaticMesh.h
+@@ -46,10 +46,10 @@ class WDlgImportStaticMesh : public WDialog
+ 	// Constructor.
+ 	WDlgImportStaticMesh( UObject* InContext, WBrowser* InOwnerWindow )
+ 	:	WDialog			( TEXT("Import Static Mesh"), IDDIALOG_IMPORT_STATIC_MESH, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	OkAllButton		( this, IDPB_OKALL,		FDelegate(this,(TDelegate)OnOkAll) )
+-	,	SkipButton		( this, IDPB_SKIP,		FDelegate(this,(TDelegate)OnSkip) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgImportStaticMesh::OnOk) )
++	,	OkAllButton		( this, IDPB_OKALL,		FDelegate(this,(TDelegate)&WDlgImportStaticMesh::OnOkAll) )
++	,	SkipButton		( this, IDPB_SKIP,		FDelegate(this,(TDelegate)&WDlgImportStaticMesh::OnSkip) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgImportStaticMesh::EndDialogFalse) )
+ 	,	PackageEdit		( this, IDEC_PACKAGE )
+ 	,	GroupEdit		( this, IDEC_GROUP )
+ 	,	NameEdit		( this, IDEC_NAME )
+@@ -334,22 +334,22 @@ class WBrowserStaticMesh : public WBrowser
+ 
+ 		PackageCombo = new WComboBox( this, IDCB_PACKAGE );
+ 		PackageCombo->OpenWindow( 1, 1 );
+-		PackageCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnPackageComboSelChange);
++		PackageCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserStaticMesh::OnPackageComboSelChange);
+ 
+ 		GroupCombo = new WComboBox( this, IDCB_GROUP );
+ 		GroupCombo->OpenWindow( 1, 1 );
+-		GroupCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnGroupComboSelChange);
++		GroupCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserStaticMesh::OnGroupComboSelChange);
+ 
+-		GroupAllCheck = new WCheckBox( this, IDCK_GRP_ALL, FDelegate(this, (TDelegate)OnGroupAllClick) );
++		GroupAllCheck = new WCheckBox( this, IDCK_GRP_ALL, FDelegate(this, (TDelegate)&WBrowserStaticMesh::OnGroupAllClick) );
+ 		GroupAllCheck->OpenWindow( 1, 0, 0, 1, 1, TEXT("All"), 1, 0, BS_PUSHLIKE );
+ 
+                 // 3DBuzz
+-		RealtimeCheck = new WCheckBox( this, IDCK_REALTIME, FDelegate(this, (TDelegate)OnRealtimeClick) );
++		RealtimeCheck = new WCheckBox( this, IDCK_REALTIME, FDelegate(this, (TDelegate)&WBrowserStaticMesh::OnRealtimeClick) );
+ 		RealtimeCheck->OpenWindow( 1, 0, 0, 1, 1, TEXT("!"), 1, 0, BS_PUSHLIKE );
+ 
+ 		MeshList = new WListBox( ExtraContainer, IDLB_STATIC_MESHES );
+ 		MeshList->OpenWindow( 1, 0, 0, 0, 0, WS_VSCROLL | LBS_SORT );
+-		MeshList->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnMeshSelectionChange);
++		MeshList->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WBrowserStaticMesh::OnMeshSelectionChange);
+ 
+ 		// 3DBuzz
+ 		SetWindowPos(MeshList->hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE);
+diff --git a/UnrealEd/Inc/BrowserTexture.h b/UnrealEd/Inc/BrowserTexture.h
+index a5e823e..dc26cff 100644
+--- a/UnrealEd/Inc/BrowserTexture.h
++++ b/UnrealEd/Inc/BrowserTexture.h
+@@ -41,8 +41,8 @@ class WDlgNewTexture : public WDialog
+ 	// Constructor.
+ 	WDlgNewTexture( UObject* InContext, WBrowser* InOwnerWindow )
+ 		:	WDialog			( TEXT("New Texture"), IDDIALOG_NEW_TEXTURE, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgNewTexture::OnOk) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgNewTexture::EndDialogFalse) )
+ 	,	PackageEdit		( this, IDEC_PACKAGE )
+ 	,	GroupEdit		( this, IDEC_GROUP )
+ 	,	NameEdit		( this, IDEC_NAME )
+@@ -205,10 +205,10 @@ class WDlgImportTexture : public WDialog
+ 	// Constructor.
+ 	WDlgImportTexture( UObject* InContext, WBrowser* InOwnerWindow )
+ 	:	WDialog			( TEXT("Import Texture"), IDDIALOG_IMPORT_TEXTURE, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	OkAllButton		( this, IDPB_OKALL,		FDelegate(this,(TDelegate)OnOkAll) )
+-	,	SkipButton		( this, IDPB_SKIP,		FDelegate(this,(TDelegate)OnSkip) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgImportTexture::OnOk) )
++	,	OkAllButton		( this, IDPB_OKALL,		FDelegate(this,(TDelegate)&WDlgImportTexture::OnOkAll) )
++	,	SkipButton		( this, IDPB_SKIP,		FDelegate(this,(TDelegate)&WDlgImportTexture::OnSkip) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgImportTexture::EndDialogFalse) )
+ 	,	PackageEdit		( this, IDEC_PACKAGE )
+ 	,	GroupEdit		( this, IDEC_GROUP )
+ 	,	NameEdit		( this, IDEC_NAME )
+@@ -468,13 +468,13 @@ class WPageMaterials : public WPropertyPage
+ 		ScrollBar->OpenWindow( 1, 0, 0, 0, 0, 1 );
+ 		PackageCombo = new WComboBox( this, IDCB_PACKAGE );
+ 		PackageCombo->OpenWindow( 1, 1 );
+-		PackageCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnPackageComboSelChange);
++		PackageCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WPageMaterials::OnPackageComboSelChange);
+ 		GroupCombo = new WComboBox( this, IDCB_GROUP );
+ 		GroupCombo->OpenWindow( 1, 1 );
+-		GroupCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnGroupComboSelChange);
+-		GroupAllCheck = new WCheckBox( this, IDCK_GRP_ALL, FDelegate(this, (TDelegate)OnGroupAllClick) );
++		GroupCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WPageMaterials::OnGroupComboSelChange);
++		GroupAllCheck = new WCheckBox( this, IDCK_GRP_ALL, FDelegate(this, (TDelegate)&WPageMaterials::OnGroupAllClick) );
+ 		GroupAllCheck->OpenWindow( 1, 0, 0, 1, 1, TEXT("All"), 1, 0, BS_PUSHLIKE );
+-		RealtimeCheck = new WCheckBox( this, IDCK_REALTIME, FDelegate(this, (TDelegate)OnRealtimeClick) );
++		RealtimeCheck = new WCheckBox( this, IDCK_REALTIME, FDelegate(this, (TDelegate)&WPageMaterials::OnRealtimeClick) );
+ 		RealtimeCheck->OpenWindow( 1, 0, 0, 1, 1, TEXT("!"), 1, 0, BS_PUSHLIKE );
+ 
+ 		PlaceControl( ViewportLabel );
+@@ -1233,7 +1233,7 @@ class WBrowserTexture : public WBrowser
+ 		FilterEdit = new WEdit( this, IDEC_FILTER );
+ 		FilterEdit->OpenWindow( 1, 0, 0 );
+ 		FilterEdit->SetText( TEXT("") );
+-		FilterEdit->ChangeDelegate = FDelegate(this, (TDelegate)OnFilterEditChange);
++		FilterEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WBrowserTexture::OnFilterEditChange);
+ 		ViewportLabel = new WLabel( this, IDSC_VIEWPORT );
+ 		ViewportLabel->OpenWindow( 1, 0 );
+ 
+@@ -1432,7 +1432,7 @@ class WBrowserTexture : public WBrowser
+ 			{
+ 				FString Package = MaterialsPage->PackageCombo->GetString( MaterialsPage->PackageCombo->GetCurrent() );
+ 				FString Group = MaterialsPage->GroupCombo->GetString( MaterialsPage->GroupCombo->GetCurrent() );
+-				(new WDlgNewMaterial( NULL, this, FDelegate(this, (TDelegate)OnNewMaterial) ))->DoModeless( Package, Group );
++				(new WDlgNewMaterial( NULL, this, FDelegate(this, (TDelegate)&WBrowserTexture::OnNewMaterial) ))->DoModeless( Package, Group );
+ 			}
+ 			break;
+ 
+diff --git a/UnrealEd/Inc/ButtonBar.h b/UnrealEd/Inc/ButtonBar.h
+index 2fb76f6..cfc691a 100644
+--- a/UnrealEd/Inc/ButtonBar.h
++++ b/UnrealEd/Inc/ButtonBar.h
+@@ -187,7 +187,7 @@ class WButtonGroup : public WWindow
+ 		ToolTipCtrl = new WToolTip(this);
+ 		ToolTipCtrl->OpenWindow();
+ 
+-		pExpandButton = new WButton( this, IDPB_EXPAND, FDelegate(this, (TDelegate)OnExpandButton) );
++		pExpandButton = new WButton( this, IDPB_EXPAND, FDelegate(this, (TDelegate)&WButtonGroup::OnExpandButton) );
+ 		pExpandButton->OpenWindow( 1, 0, 0, 19, 19, TEXT(""), 1, BS_OWNERDRAW );
+ 		UpdateButton();
+ 
+@@ -994,7 +994,7 @@ class WButtonBar : public WWindow
+ 
+ 		ScrollBar = new WThinScrollBar( this, IDSB_SCROLLBAR2 );
+ 		ScrollBar->OpenWindow( 64, 0, 4, 500 );
+-		ScrollBar->PosChangedDelegate = FDelegate(this, (TDelegate)OnScrollBarPosChanged);
++		ScrollBar->PosChangedDelegate = FDelegate(this, (TDelegate)&WButtonBar::OnScrollBarPosChanged);
+ 
+ 		PositionChildControls();
+ 		UpdateButtons();
+diff --git a/UnrealEd/Inc/CodeFrame.h b/UnrealEd/Inc/CodeFrame.h
+index 8d6d09c..f712c85 100644
+--- a/UnrealEd/Inc/CodeFrame.h
++++ b/UnrealEd/Inc/CodeFrame.h
+@@ -36,12 +36,12 @@ class WDlgFindReplace : public WDialog
+ 	// Constructor.
+ 	WDlgFindReplace( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog			( TEXT("Find/Replace"), IDDIALOG_FINDREPLACE, InOwnerWindow )
+-	,	FindButton			( this, IDPB_FIND,			FDelegate(this,(TDelegate)OnFind) )
+-	,	FindNextButton		( this, IDPB_FIND_NEXT,		FDelegate(this,(TDelegate)OnFindNext) )
+-	,	FindPrevButton		( this, IDPB_FIND_PREV,		FDelegate(this,(TDelegate)OnFindPrev) )
+-	,	ReplaceButton		( this, IDPB_REPLACE,		FDelegate(this,(TDelegate)OnReplace) )
+-	,	ReplaceAllButton	( this, IDPB_REPLACE_ALL,	FDelegate(this,(TDelegate)OnReplaceAll) )
+-	,	CloseButton			( this, IDPB_CLOSE,			FDelegate(this,(TDelegate)OnCloseButton) )
++	,	FindButton			( this, IDPB_FIND,			FDelegate(this,(TDelegate)&WDlgFindReplace::OnFind) )
++	,	FindNextButton		( this, IDPB_FIND_NEXT,		FDelegate(this,(TDelegate)&WDlgFindReplace::OnFindNext) )
++	,	FindPrevButton		( this, IDPB_FIND_PREV,		FDelegate(this,(TDelegate)&WDlgFindReplace::OnFindPrev) )
++	,	ReplaceButton		( this, IDPB_REPLACE,		FDelegate(this,(TDelegate)&WDlgFindReplace::OnReplace) )
++	,	ReplaceAllButton	( this, IDPB_REPLACE_ALL,	FDelegate(this,(TDelegate)&WDlgFindReplace::OnReplaceAll) )
++	,	CloseButton			( this, IDPB_CLOSE,			FDelegate(this,(TDelegate)&WDlgFindReplace::OnCloseButton) )
+ 	,	FindCombo			( this, IDCB_FIND )
+ 	,	ReplaceCombo		( this, IDCB_REPLACE )
+ 	,	MatchCaseCheck		( this, IDCK_MATCH_CASE)
+@@ -668,7 +668,7 @@ class WCodeFrame : public WWindow
+ 		}
+ 
+ 		FilesList.OpenWindow( 1, 0, 0, 0, 1 );
+-		FilesList.DoubleClickDelegate = FDelegate(this, (TDelegate)OnFilesListDblClick);
++		FilesList.DoubleClickDelegate = FDelegate(this, (TDelegate)&WCodeFrame::OnFilesListDblClick);
+ 
+ 		UpdateStatus( FALSE, TEXT("Ready."));
+ 
+diff --git a/UnrealEd/Inc/DlgAddSpecial.h b/UnrealEd/Inc/DlgAddSpecial.h
+index d5befb1..f4c56a4 100644
+--- a/UnrealEd/Inc/DlgAddSpecial.h
++++ b/UnrealEd/Inc/DlgAddSpecial.h
+@@ -22,8 +22,8 @@ class WDlgAddSpecial : public WDialog
+ 	WDlgAddSpecial( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog			( TEXT("Add Special"), IDDIALOG_ADD_SPECIAL, InOwnerWindow )
+ 	,	PrefabCombo		( this, IDCB_PREFABS )
+-	,	OKButton		( this, IDOK, FDelegate(this,(TDelegate)OnOK) )
+-	,	CloseButton	( this, IDPB_CLOSE, FDelegate(this,(TDelegate)OnClose) )
++	,	OKButton		( this, IDOK, FDelegate(this,(TDelegate)&WDlgAddSpecial::OnOK) )
++	,	CloseButton	( this, IDPB_CLOSE, FDelegate(this,(TDelegate)&WDlgAddSpecial::OnClose) )
+ 	{
+ 	}
+ 
+@@ -39,7 +39,7 @@ class WDlgAddSpecial : public WDialog
+ 		PrefabCombo.AddString(TEXT("Regular Brush"));
+ 		PrefabCombo.AddString(TEXT("Semi Solid Brush"));
+ 		PrefabCombo.AddString(TEXT("Non Solid Brush"));
+-		PrefabCombo.SelectionChangeDelegate = FDelegate(this, (TDelegate)OnComboPrefabsSelChange);
++		PrefabCombo.SelectionChangeDelegate = FDelegate(this, (TDelegate)&WDlgAddSpecial::OnComboPrefabsSelChange);
+ 
+ 		PrefabCombo.SetCurrent( 3 );
+ 		OnComboPrefabsSelChange();
+diff --git a/UnrealEd/Inc/DlgBrushBuilder.h b/UnrealEd/Inc/DlgBrushBuilder.h
+index 8996bf0..1f35117 100644
+--- a/UnrealEd/Inc/DlgBrushBuilder.h
++++ b/UnrealEd/Inc/DlgBrushBuilder.h
+@@ -24,8 +24,8 @@ class WDlgBrushBuilder : public WDialog
+ 	// Constructor.
+ 	WDlgBrushBuilder( UObject* InContext, WWindow* InOwnerWindow, UBrushBuilder* InBuilder )
+ 	:	WDialog		( TEXT("Brush Builder"), IDDIALOG_BRUSH_BUILDER, InOwnerWindow )
+-	,	BuildButton	( this, IDPB_BUILD, FDelegate(this,(TDelegate)OnBuild) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	BuildButton	( this, IDPB_BUILD, FDelegate(this,(TDelegate)&WDlgBrushBuilder::OnBuild) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgBrushBuilder::EndDialogFalse) )
+ 	{
+ 		Builder = InBuilder;
+ 
+diff --git a/UnrealEd/Inc/DlgBrushImport.h b/UnrealEd/Inc/DlgBrushImport.h
+index 97c0d58..3d5a2a8 100644
+--- a/UnrealEd/Inc/DlgBrushImport.h
++++ b/UnrealEd/Inc/DlgBrushImport.h
+@@ -23,8 +23,8 @@ class WDlgBrushImport : public WDialog
+ 	// Constructor.
+ 	WDlgBrushImport( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog			( TEXT("Brush Import"), IDDIALOG_IMPORT_BRUSH, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgBrushImport::OnOk) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgBrushImport::EndDialogFalse) )
+ 	,	MergeCheck		( this, IDCK_MERGE_FACES )
+ 	,	SolidCheck		( this, IDRB_SOLID )
+ 	,	NonSolidCheck	( this, IDRB_NONSOLID )
+diff --git a/UnrealEd/Inc/DlgDepth.h b/UnrealEd/Inc/DlgDepth.h
+index b917946..ff4be22 100644
+--- a/UnrealEd/Inc/DlgDepth.h
++++ b/UnrealEd/Inc/DlgDepth.h
+@@ -22,8 +22,8 @@ class WDlgDepth : public WDialog
+ 	// Constructor.
+ 	WDlgDepth( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog				( TEXT("Depth"), IDDIALOG_Depth, InOwnerWindow )
+-	,	CancelButton		( this, IDCANCEL, FDelegate(this,(TDelegate)EndDialogFalse) )
+-	,	OKButton			( this, IDOK, FDelegate(this,(TDelegate)OnOK) )
++	,	CancelButton		( this, IDCANCEL, FDelegate(this,(TDelegate)&WDlgDepth::EndDialogFalse) )
++	,	OKButton			( this, IDOK, FDelegate(this,(TDelegate)&WDlgDepth::OnOK) )
+ 	,	DepthEdit			( this, IDEC_DEPTH )
+ 	{
+ 	}
+diff --git a/UnrealEd/Inc/DlgGeneric.h b/UnrealEd/Inc/DlgGeneric.h
+index 77c8fe7..ce367ac 100644
+--- a/UnrealEd/Inc/DlgGeneric.h
++++ b/UnrealEd/Inc/DlgGeneric.h
+@@ -27,8 +27,8 @@ class WDlgGeneric : public WDialog
+ 	// Constructor.
+ 	WDlgGeneric( UObject* InContext, WWindow* InOwnerWindow, INT InProxyType, FString InDlgCaption, void* InData = NULL )
+ 	:	WDialog			( TEXT("Generic"), IDDIALOG_GENERIC, InOwnerWindow )
+-	,	OKButton		( this, IDOK, FDelegate(this,(TDelegate)OnOK) )
+-	,	CancelButton	( this, IDCANCEL, FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OKButton		( this, IDOK, FDelegate(this,(TDelegate)&WDlgGeneric::OnOK) )
++	,	CancelButton	( this, IDCANCEL, FDelegate(this,(TDelegate)&WDlgGeneric::EndDialogFalse) )
+ 	,	CommentLabel	( this, IDSC_COMMENT )
+ 	{
+ 		DlgCaption = InDlgCaption;
+diff --git a/UnrealEd/Inc/DlgLoadErrors.h b/UnrealEd/Inc/DlgLoadErrors.h
+index 94d6d0c..03aefe0 100644
+--- a/UnrealEd/Inc/DlgLoadErrors.h
++++ b/UnrealEd/Inc/DlgLoadErrors.h
+@@ -18,7 +18,7 @@ class WDlgLoadErrors : public WDialog
+ 	// Constructor.
+ 	WDlgLoadErrors( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog			( TEXT("Load Errors"), IDDIALOG_LOAD_ERRORS, InOwnerWindow )
+-	,	OKButton		( this, IDOK, FDelegate(this,(TDelegate)EndDialogTrue) )
++	,	OKButton		( this, IDOK, FDelegate(this,(TDelegate)&WDlgLoadErrors::EndDialogTrue) )
+ 	,	PackageList		( this, IDLB_PACKAGES )
+ 	,	ResourceList	( this, IDLB_RESOURCES )
+ 	{
+diff --git a/UnrealEd/Inc/DlgMapCheck.h b/UnrealEd/Inc/DlgMapCheck.h
+index 2d91bbe..2d8b148 100644
+--- a/UnrealEd/Inc/DlgMapCheck.h
++++ b/UnrealEd/Inc/DlgMapCheck.h
+@@ -33,8 +33,8 @@ class WDlgMapCheck : public WDialog
+ 	// Constructor.
+ 	WDlgMapCheck( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog				( TEXT("Check Map"), IDDIALOG_MAP_CHECK, InOwnerWindow )
+-	,	RefreshButton		( this, IDPB_REFRESH, FDelegate(this,(TDelegate)OnRefresh) )
+-	,	CloseButton			( this, IDPB_CLOSE, FDelegate(this,(TDelegate)OnClose) )
++	,	RefreshButton		( this, IDPB_REFRESH, FDelegate(this,(TDelegate)&WDlgMapCheck::OnRefresh) )
++	,	CloseButton			( this, IDPB_CLOSE, FDelegate(this,(TDelegate)&WDlgMapCheck::OnClose) )
+ 	,	ItemList			( this, IDLC_ITEMS )
+ 	{
+ 		Container = NULL;
+@@ -64,7 +64,7 @@ class WDlgMapCheck : public WDialog
+ 		check(himl);
+ 		ListView_SetImageList( ItemList.hWnd, himl, LVSIL_SMALL );
+ 
+-		ItemList.DblClkDelegate = FDelegate(this, (TDelegate)OnItemListDblClk);
++		ItemList.DblClkDelegate = FDelegate(this, (TDelegate)&WDlgMapCheck::OnItemListDblClk);
+ 
+ 		Anchors.Set( (DWORD)ItemList.hWnd,			FWindowAnchor( hWnd, ItemList.hWnd,			ANCHOR_TL, 4, 4,																	ANCHOR_BR, -4, -STANDARD_BUTTON_HEIGHT-8 ) );
+ 		Anchors.Set( (DWORD)RefreshButton.hWnd,		FWindowAnchor( hWnd, RefreshButton.hWnd,
+diff --git a/UnrealEd/Inc/DlgMapImport.h b/UnrealEd/Inc/DlgMapImport.h
+index bbdaff5..a58bbce 100644
+--- a/UnrealEd/Inc/DlgMapImport.h
++++ b/UnrealEd/Inc/DlgMapImport.h
+@@ -24,8 +24,8 @@ class WDlgMapImport : public WDialog
+ 	// Constructor.
+ 	WDlgMapImport( WWindow* InOwnerWindow )
+ 	:	WDialog			( TEXT("Map Import"), IDDIALOG_IMPORT_MAP, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgMapImport::OnOk) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgMapImport::EndDialogFalse) )
+ 	,	ImportIntoExistingCheck		( this, IDCK_IMPORT_INTO_EXISTING)
+ 	{
+ 		bImportIntoExistingCheck = 0;
+diff --git a/UnrealEd/Inc/DlgNewMaterial.h b/UnrealEd/Inc/DlgNewMaterial.h
+index 7731771..6378fe4 100644
+--- a/UnrealEd/Inc/DlgNewMaterial.h
++++ b/UnrealEd/Inc/DlgNewMaterial.h
+@@ -29,8 +29,8 @@ class WDlgNewMaterial : public WDialog
+ 	// Constructor.
+ 	WDlgNewMaterial( UObject* InContext, WWindow* InOwnerWindow, FDelegate InOnNewMaterial )
+ 	:	WDialog		( TEXT("New Material"), IDDIALOG_NEW_MATERIAL, InOwnerWindow )
+-	,	NewButton	( this, IDPB_NEWMATERIAL, FDelegate(this,(TDelegate)OnNew) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	NewButton	( this, IDPB_NEWMATERIAL, FDelegate(this,(TDelegate)&WDlgNewMaterial::OnNew) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgNewMaterial::EndDialogFalse) )
+ 	,	PackageEdit		( this, IDEC_PACKAGE )
+ 	,	GroupEdit		( this, IDEC_GROUP )
+ 	,	NameEdit		( this, IDEC_NAME )
+@@ -39,7 +39,7 @@ class WDlgNewMaterial : public WDialog
+ 	,	pProps			( NULL )
+ 	,	OnNewMaterial	( InOnNewMaterial )
+ 	{
+-		FactoryCombo.SelectionChangeDelegate = FDelegate( this, (TDelegate)(OnFactoryChange) );
++		FactoryCombo.SelectionChangeDelegate = FDelegate( this, (TDelegate)(&WDlgNewMaterial::OnFactoryChange) );
+ 	}
+ 
+ 	// WDialog interface.
+diff --git a/UnrealEd/Inc/DlgRename.h b/UnrealEd/Inc/DlgRename.h
+index d0b4cd5..9f10ccc 100644
+--- a/UnrealEd/Inc/DlgRename.h
++++ b/UnrealEd/Inc/DlgRename.h
+@@ -24,8 +24,8 @@ class WDlgRename : public WDialog
+ 	// Constructor.
+ 	WDlgRename( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog				( TEXT("Rename"), IDDIALOG_RENAME, InOwnerWindow )
+-	,	CancelButton		( this, IDCANCEL, FDelegate(this,(TDelegate)EndDialogFalse) )
+-	,	OKButton			( this, IDOK, FDelegate(this,(TDelegate)OnOK) )
++	,	CancelButton		( this, IDCANCEL, FDelegate(this,(TDelegate)&WDlgRename::EndDialogFalse) )
++	,	OKButton			( this, IDOK, FDelegate(this,(TDelegate)&WDlgRename::OnOK) )
+ 	,	NameEdit			( this, IDEC_NAME )
+ 	,	GroupEdit			( this, IDEC_NEWGROUP )
+ 	,	PackageEdit			( this, IDEC_NEWPACKAGE )
+diff --git a/UnrealEd/Inc/DlgScaleLights.h b/UnrealEd/Inc/DlgScaleLights.h
+index de05d99..bf2b268 100644
+--- a/UnrealEd/Inc/DlgScaleLights.h
++++ b/UnrealEd/Inc/DlgScaleLights.h
+@@ -21,8 +21,8 @@ class WDlgScaleLights : public WDialog
+ 	// Constructor.
+ 	WDlgScaleLights( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog			( TEXT("Scale Lights"), IDDIALOG_SCALE_LIGHTS, InOwnerWindow )
+-	,	OKButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOK) )
+-	,	CloseButton		( this, IDPB_CLOSE,		FDelegate(this,(TDelegate)OnClose) )
++	,	OKButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgScaleLights::OnOK) )
++	,	CloseButton		( this, IDPB_CLOSE,		FDelegate(this,(TDelegate)&WDlgScaleLights::OnClose) )
+ 	,	LiteralCheck	( this, IDRB_LITERAL )
+ 	,	ValueEdit		( this, IDEC_VALUE )
+ 	{
+diff --git a/UnrealEd/Inc/DlgSearchActors.h b/UnrealEd/Inc/DlgSearchActors.h
+index 14b74b4..e839237 100644
+--- a/UnrealEd/Inc/DlgSearchActors.h
++++ b/UnrealEd/Inc/DlgSearchActors.h
+@@ -21,7 +21,7 @@ class WDlgSearchActors : public WDialog
+ 	// Constructor.
+ 	WDlgSearchActors( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog			( TEXT("Search for Actors"), IDDIALOG_SEARCH, InOwnerWindow )
+-	,	CloseButton		( this, IDPB_CLOSE,		FDelegate(this,(TDelegate)OnClose) )
++	,	CloseButton		( this, IDPB_CLOSE,		FDelegate(this,(TDelegate)&WDlgSearchActors::OnClose) )
+ 	,	NameEdit		( this, IDEC_NAME )
+ 	,	EventEdit		( this, IDEC_EVENT )
+ 	,	TagEdit			( this, IDEC_TAG )
+@@ -34,10 +34,10 @@ class WDlgSearchActors : public WDialog
+ 	{
+ 		guard(WDlgSearchActors::OnInitDialog);
+ 		WDialog::OnInitDialog();
+-		ActorList.DoubleClickDelegate = FDelegate(this, (TDelegate)OnActorListDblClick);
+-		NameEdit.ChangeDelegate = FDelegate(this, (TDelegate)OnNameEditChange);
+-		EventEdit.ChangeDelegate = FDelegate(this, (TDelegate)OnEventEditChange);
+-		TagEdit.ChangeDelegate = FDelegate(this, (TDelegate)OnTagEditChange);
++		ActorList.DoubleClickDelegate = FDelegate(this, (TDelegate)&WDlgSearchActors::OnActorListDblClick);
++		NameEdit.ChangeDelegate = FDelegate(this, (TDelegate)&WDlgSearchActors::OnNameEditChange);
++		EventEdit.ChangeDelegate = FDelegate(this, (TDelegate)&WDlgSearchActors::OnEventEditChange);
++		TagEdit.ChangeDelegate = FDelegate(this, (TDelegate)&WDlgSearchActors::OnTagEditChange);
+ 		RefreshActorList();
+ 		unguard;
+ 	}
+diff --git a/UnrealEd/Inc/DlgTexReplace.h b/UnrealEd/Inc/DlgTexReplace.h
+index b06fce7..719fedb 100644
+--- a/UnrealEd/Inc/DlgTexReplace.h
++++ b/UnrealEd/Inc/DlgTexReplace.h
+@@ -27,10 +27,10 @@ class WDlgTexReplace : public WDialog
+ 	// Constructor.
+ 	WDlgTexReplace( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog		( TEXT("Replace Textures"), IDDIALOG_TEX_REPLACE, InOwnerWindow )
+-	,	Set1Button	( this, IDPB_SET1, FDelegate(this,(TDelegate)OnSet1Button) )
+-	,	Set2Button	( this, IDPB_SET2, FDelegate(this,(TDelegate)OnSet2Button) )
+-	,	ReplaceButton	( this, IDPB_REPLACE, FDelegate(this,(TDelegate)OnReplaceButton) )
+-	,	CancelButton	( this, IDCANCEL, FDelegate(this,(TDelegate)EndDialogTrue) )
++	,	Set1Button	( this, IDPB_SET1, FDelegate(this,(TDelegate)&WDlgTexReplace::OnSet1Button) )
++	,	Set2Button	( this, IDPB_SET2, FDelegate(this,(TDelegate)&WDlgTexReplace::OnSet2Button) )
++	,	ReplaceButton	( this, IDPB_REPLACE, FDelegate(this,(TDelegate)&WDlgTexReplace::OnReplaceButton) )
++	,	CancelButton	( this, IDCANCEL, FDelegate(this,(TDelegate)&WDlgTexReplace::EndDialogTrue) )
+ 	,	TexName1Label	(this, IDSC_TEX_NAME1 )
+ 	,	TexName2Label	(this, IDSC_TEX_NAME2 )
+     // gam --- 
+diff --git a/UnrealEd/Inc/DlgTipOfTheDay.h b/UnrealEd/Inc/DlgTipOfTheDay.h
+index 9779513..dc2cde3 100644
+--- a/UnrealEd/Inc/DlgTipOfTheDay.h
++++ b/UnrealEd/Inc/DlgTipOfTheDay.h
+@@ -23,8 +23,8 @@ class WDlgTipOfTheDay : public WDialog
+ 	// Constructor.
+ 	WDlgTipOfTheDay( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog			( TEXT("Tip of the Day"), IDDIALOG_TOTD, InOwnerWindow )
+-	,	CloseButton		( this, IDOK,			FDelegate(this,(TDelegate)OnClose) )
+-	,	NextTipButton	( this, IDPB_NEXT_TIP,	FDelegate(this,(TDelegate)OnNextTip) )
++	,	CloseButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgTipOfTheDay::OnClose) )
++	,	NextTipButton	( this, IDPB_NEXT_TIP,	FDelegate(this,(TDelegate)&WDlgTipOfTheDay::OnNextTip) )
+ 	,	ShowTipsCheck	( this, IDCK_SHOW_TIPS )
+ 	{
+ 		bitmapTOTD = (HBITMAP)LoadImageA( hInstance, MAKEINTRESOURCEA(IDBM_TIPOFTHEDAY), IMAGE_BITMAP, 0, 0, LR_DEFAULTCOLOR );	check(bitmapTOTD);
+diff --git a/UnrealEd/Inc/DlgViewportConfig.h b/UnrealEd/Inc/DlgViewportConfig.h
+index 6ad3b06..cd91bf0 100644
+--- a/UnrealEd/Inc/DlgViewportConfig.h
++++ b/UnrealEd/Inc/DlgViewportConfig.h
+@@ -23,8 +23,8 @@ class WDlgViewportConfig : public WDialog
+ 	// Constructor.
+ 	WDlgViewportConfig( UObject* InContext, WWindow* InOwnerWindow )
+ 	:	WDialog			( TEXT("Viewport Config"), IDDIALOG_VIEWPORT_CONFIG, InOwnerWindow )
+-	,	OKButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOK) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OKButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgViewportConfig::OnOK) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgViewportConfig::EndDialogFalse) )
+ 	,	Cfg0Check		( this, IDRB_VCONFIG0 )
+ 	,	Cfg1Check		( this, IDRB_VCONFIG1 )
+ 	,	Cfg2Check		( this, IDRB_VCONFIG2 )
+diff --git a/UnrealEd/Inc/MatineePreview.h b/UnrealEd/Inc/MatineePreview.h
+index f53550f..bc228f4 100644
+--- a/UnrealEd/Inc/MatineePreview.h
++++ b/UnrealEd/Inc/MatineePreview.h
+@@ -94,27 +94,27 @@ class WMatineePreview : public WWindow
+ 
+ 		TimeScrollBar = new WTimeScrollBar( this, IDSB_TIME );
+ 		TimeScrollBar->OpenWindow( 0, 0, 1 );
+-		FirstButton = new WButton( this, IDPB_VCR_FIRST, FDelegate(this,(TDelegate)OnVCRFirst) );
++		FirstButton = new WButton( this, IDPB_VCR_FIRST, FDelegate(this,(TDelegate)&WMatineePreview::OnVCRFirst) );
+ 		FirstButton->OpenWindow( 1, 0, 0, 24, 24, NULL, 0, BS_OWNERDRAW );
+-		StopButton = new WButton( this, IDPB_VCR_STOP, FDelegate(this,(TDelegate)OnVCRStop) );
++		StopButton = new WButton( this, IDPB_VCR_STOP, FDelegate(this,(TDelegate)&WMatineePreview::OnVCRStop) );
+ 		StopButton->OpenWindow( 1, 0, 0, 24, 24, NULL, 0, BS_OWNERDRAW );
+-		ForwardButton = new WButton( this, IDPB_VCR_FORWARD, FDelegate(this,(TDelegate)OnVCRForward) );
++		ForwardButton = new WButton( this, IDPB_VCR_FORWARD, FDelegate(this,(TDelegate)&WMatineePreview::OnVCRForward) );
+ 		ForwardButton->OpenWindow( 1, 0, 0, 24, 24, NULL, 0, BS_OWNERDRAW );
+-		RefreshButton = new WButton( this, IDPB_MAT_REFRESH, FDelegate(this,(TDelegate)OnRefreshClick) );
++		RefreshButton = new WButton( this, IDPB_MAT_REFRESH, FDelegate(this,(TDelegate)&WMatineePreview::OnRefreshClick) );
+ 		RefreshButton->OpenWindow( 1, 0, 0, 24, 24, NULL, 0, BS_OWNERDRAW );
+-		ResetButton = new WButton( this, IDPB_RESET, FDelegate(this,(TDelegate)OnResetClick) );
++		ResetButton = new WButton( this, IDPB_RESET, FDelegate(this,(TDelegate)&WMatineePreview::OnResetClick) );
+ 		ResetButton->OpenWindow( 1, 0, 0, 24, 24, NULL, 0, BS_OWNERDRAW );
+ 		ShowRotationsCheck = new WCheckBox( this, IDPB_SHOW_ROTATIONS );
+ 		ShowRotationsCheck->OpenWindow( 1, 0, 0, 24, 24, NULL, 1, 1, BS_PUSHLIKE | BS_OWNERDRAW );
+-		ShowRotationsCheck->ClickDelegate = FDelegate(this,(TDelegate)OnShowRotations);
++		ShowRotationsCheck->ClickDelegate = FDelegate(this,(TDelegate)&WMatineePreview::OnShowRotations);
+ 		ShowPathsCheck = new WCheckBox( this, IDPB_SHOW_PATHS );
+ 		ShowPathsCheck->OpenWindow( 1, 0, 0, 24, 24, NULL, 1, 1, BS_PUSHLIKE | BS_OWNERDRAW );
+-		ShowPathsCheck->ClickDelegate = FDelegate(this,(TDelegate)OnShowPaths);
++		ShowPathsCheck->ClickDelegate = FDelegate(this,(TDelegate)&WMatineePreview::OnShowPaths);
+ 		CinematicsCheck = new WCheckBox( this, IDPB_CINEMATICS );
+ 		CinematicsCheck->OpenWindow( 1, 0, 0, 24, 24, NULL, 1, 1, BS_PUSHLIKE | BS_OWNERDRAW );
+-		CinematicsCheck->ClickDelegate = FDelegate(this,(TDelegate)OnCinematics);
++		CinematicsCheck->ClickDelegate = FDelegate(this,(TDelegate)&WMatineePreview::OnCinematics);
+ 
+-		TimeScrollBar->PosChangedDelegate = FDelegate(this, (TDelegate)OnTimePosChanged);
++		TimeScrollBar->PosChangedDelegate = FDelegate(this, (TDelegate)&WMatineePreview::OnTimePosChanged);
+ 
+ 		FirstButton->SetBitmap( FirstBitmap );
+ 		StopButton->SetBitmap( StopBitmap );
+diff --git a/UnrealEd/Inc/MatineeSheet.h b/UnrealEd/Inc/MatineeSheet.h
+index 52aee8e..2311ca1 100644
+--- a/UnrealEd/Inc/MatineeSheet.h
++++ b/UnrealEd/Inc/MatineeSheet.h
+@@ -79,17 +79,17 @@ class WPageScenes : public WPropertyPage
+ 		ScenesBox->OpenWindow( 1, 0 );
+ 		ScrollBar = new WScrollBar( this, IDSB_SCENES );
+ 		ScrollBar->OpenWindow( 1, 0, 0, 10, 10 );
+-		NewButton = new WButton( this, IDPB_NEW, FDelegate(this,(TDelegate)OnNew) );
++		NewButton = new WButton( this, IDPB_NEW, FDelegate(this,(TDelegate)&WPageScenes::OnNew) );
+ 		NewButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("N") );
+-		DuplicateButton = new WButton( this, IDPB_DUPLICATE, FDelegate(this,(TDelegate)OnDuplicate) );
++		DuplicateButton = new WButton( this, IDPB_DUPLICATE, FDelegate(this,(TDelegate)&WPageScenes::OnDuplicate) );
+ 		DuplicateButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("N") );
+-		DeleteButton = new WButton( this, IDPB_DELETE, FDelegate(this,(TDelegate)OnDelete) );
++		DeleteButton = new WButton( this, IDPB_DELETE, FDelegate(this,(TDelegate)&WPageScenes::OnDelete) );
+ 		DeleteButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("X") );
+-		MoveUpButton = new WButton( this, IDPB_MOVE_UP, FDelegate(this,(TDelegate)OnMoveUp) );
++		MoveUpButton = new WButton( this, IDPB_MOVE_UP, FDelegate(this,(TDelegate)&WPageScenes::OnMoveUp) );
+ 		MoveUpButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("X") );
+-		MoveDownButton = new WButton( this, IDPB_MOVE_DOWN, FDelegate(this,(TDelegate)OnMoveDown) );
++		MoveDownButton = new WButton( this, IDPB_MOVE_DOWN, FDelegate(this,(TDelegate)&WPageScenes::OnMoveDown) );
+ 		MoveDownButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("X") );
+-		PreviewButton = new WButton( this, IDPB_PREVIEW, FDelegate(this,(TDelegate)OnPreview) );
++		PreviewButton = new WButton( this, IDPB_PREVIEW, FDelegate(this,(TDelegate)&WPageScenes::OnPreview) );
+ 		PreviewButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("X") );
+ 
+ 		PlaceControl( ScenesBox );
+@@ -493,17 +493,17 @@ class WPageActions : public WPropertyPage
+ 		ActionsBox->OpenWindow( 1, 0 );
+ 		ScrollBar = new WScrollBar( this, IDSB_ACTIONS );
+ 		ScrollBar->OpenWindow( 1, 0, 0, 10, 10 );
+-		MoveUpButton = new WButton( this, IDPB_MOVE_UP, FDelegate(this,(TDelegate)OnMoveUp) );
++		MoveUpButton = new WButton( this, IDPB_MOVE_UP, FDelegate(this,(TDelegate)&WPageActions::OnMoveUp) );
+ 		MoveUpButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("+") );
+-		MoveDownButton = new WButton( this, IDPB_MOVE_DOWN, FDelegate(this,(TDelegate)OnMoveDown) );
++		MoveDownButton = new WButton( this, IDPB_MOVE_DOWN, FDelegate(this,(TDelegate)&WPageActions::OnMoveDown) );
+ 		MoveDownButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("-") );
+-		NewButton = new WButton( this, IDPB_NEW, FDelegate(this,(TDelegate)OnNew) );
++		NewButton = new WButton( this, IDPB_NEW, FDelegate(this,(TDelegate)&WPageActions::OnNew) );
+ 		NewButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("N") );
+-		DuplicateButton = new WButton( this, IDPB_DUPLICATE, FDelegate(this,(TDelegate)OnDuplicate) );
++		DuplicateButton = new WButton( this, IDPB_DUPLICATE, FDelegate(this,(TDelegate)&WPageActions::OnDuplicate) );
+ 		DuplicateButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("D") );
+-		DeleteButton = new WButton( this, IDPB_DELETE, FDelegate(this,(TDelegate)OnDelete) );
++		DeleteButton = new WButton( this, IDPB_DELETE, FDelegate(this,(TDelegate)&WPageActions::OnDelete) );
+ 		DeleteButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("X") );
+-		PreviewButton = new WButton( this, IDPB_PREVIEW, FDelegate(this,(TDelegate)OnPreview) );
++		PreviewButton = new WButton( this, IDPB_PREVIEW, FDelegate(this,(TDelegate)&WPageActions::OnPreview) );
+ 		PreviewButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("X") );
+ 
+ 		PlaceControl( ActionsBox );
+@@ -940,17 +940,17 @@ class WPageSubActions : public WPropertyPage
+ 		SubActionsBox->OpenWindow( 1, 0 );
+ 		ScrollBar = new WScrollBar( this, IDSB_SUBACTIONS );
+ 		ScrollBar->OpenWindow( 1, 0, 0, 10, 10 );
+-		MoveUpButton = new WButton( this, IDPB_MOVE_UP, FDelegate(this,(TDelegate)OnMoveUp) );
++		MoveUpButton = new WButton( this, IDPB_MOVE_UP, FDelegate(this,(TDelegate)&WPageSubActions::OnMoveUp) );
+ 		MoveUpButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("+") );
+-		MoveDownButton = new WButton( this, IDPB_MOVE_DOWN, FDelegate(this,(TDelegate)OnMoveDown) );
++		MoveDownButton = new WButton( this, IDPB_MOVE_DOWN, FDelegate(this,(TDelegate)&WPageSubActions::OnMoveDown) );
+ 		MoveDownButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("-") );
+-		NewButton = new WButton( this, IDPB_NEW, FDelegate(this,(TDelegate)OnNew) );
++		NewButton = new WButton( this, IDPB_NEW, FDelegate(this,(TDelegate)&WPageSubActions::OnNew) );
+ 		NewButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("N") );
+-		DuplicateButton = new WButton( this, IDPB_DUPLICATE, FDelegate(this,(TDelegate)OnDuplicate) );
++		DuplicateButton = new WButton( this, IDPB_DUPLICATE, FDelegate(this,(TDelegate)&WPageSubActions::OnDuplicate) );
+ 		DuplicateButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("D") );
+-		DeleteButton = new WButton( this, IDPB_DELETE, FDelegate(this,(TDelegate)OnDelete) );
++		DeleteButton = new WButton( this, IDPB_DELETE, FDelegate(this,(TDelegate)&WPageSubActions::OnDelete) );
+ 		DeleteButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("X") );
+-		PreviewButton = new WButton( this, IDPB_PREVIEW, FDelegate(this,(TDelegate)OnPreview) );
++		PreviewButton = new WButton( this, IDPB_PREVIEW, FDelegate(this,(TDelegate)&WPageSubActions::OnPreview) );
+ 		PreviewButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("X") );
+ 
+ 		PlaceControl( SubActionsBox );
+@@ -1330,11 +1330,11 @@ class WPageMatTools : public WPropertyPage
+ 		// Create child controls and let the base class determine their proper positions.
+ 		MatToolsBox = new WGroupBox( this, IDGP_TOOLS );
+ 		MatToolsBox->OpenWindow( 1, 0 );
+-		AddIPButton = new WButton( this, IDPB_ADD_IP, FDelegate(this,(TDelegate)OnAddIP) );
++		AddIPButton = new WButton( this, IDPB_ADD_IP, FDelegate(this,(TDelegate)&WPageMatTools::OnAddIP) );
+ 		AddIPButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("") );
+-		AddLookTargetButton = new WButton( this, IDPB_ADD_LOOKTARGET, FDelegate(this,(TDelegate)OnAddLookTarget) );
++		AddLookTargetButton = new WButton( this, IDPB_ADD_LOOKTARGET, FDelegate(this,(TDelegate)&WPageMatTools::OnAddLookTarget) );
+ 		AddLookTargetButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("") );
+-		AddIPAndActionButton = new WButton( this, IDPB_ADD_IP_AND_ACTION, FDelegate(this,(TDelegate)OnAddIPAndAction) );
++		AddIPAndActionButton = new WButton( this, IDPB_ADD_IP_AND_ACTION, FDelegate(this,(TDelegate)&WPageMatTools::OnAddIPAndAction) );
+ 		AddIPAndActionButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("") );
+ 
+ 		PlaceControl( MatToolsBox );
+diff --git a/UnrealEd/Inc/ParticleEditorTools.h b/UnrealEd/Inc/ParticleEditorTools.h
+index 5e29c3d..a2876a7 100644
+--- a/UnrealEd/Inc/ParticleEditorTools.h
++++ b/UnrealEd/Inc/ParticleEditorTools.h
+@@ -1391,7 +1391,7 @@ public:
+ 
+ 		for(INT i = 0;  i < FieldNames.Num(); i++)
+ 		{
+-			ValEdits(i)->ChangeDelegate = FDelegate(this, (TDelegate)OnTextChange);
++			ValEdits(i)->ChangeDelegate = FDelegate(this, (TDelegate)&WVectorEdit<T>::OnTextChange);
+ 		}
+ 	}
+ 
+@@ -2316,8 +2316,8 @@ public:
+ 		DeleteButton = new WButton(this);
+ 		DeleteButton->OpenWindow( TRUE, 40, 0, 40, 20, TEXT("Delete") );
+ 
+-		InsertButton->ClickDelegate = FDelegate(this, (TDelegate)OnInsertClick);
+-		DeleteButton->ClickDelegate = FDelegate(this, (TDelegate)OnDeleteClick);
++		InsertButton->ClickDelegate = FDelegate(this, (TDelegate)&WParticleArrayTool<T>::OnInsertClick);
++		DeleteButton->ClickDelegate = FDelegate(this, (TDelegate)&WParticleArrayTool<T>::OnDeleteClick);
+ 	}
+ 
+ 
+diff --git a/UnrealEd/Inc/TerrainEditSheet.h b/UnrealEd/Inc/TerrainEditSheet.h
+index ef0a6f2..8bbd11e 100644
+--- a/UnrealEd/Inc/TerrainEditSheet.h
++++ b/UnrealEd/Inc/TerrainEditSheet.h
+@@ -55,7 +55,7 @@ class WPageToolsTerrains : public WPropertyPage
+ 		// Create child controls and let the base class determine their proper positions.
+ 		TerrainsList = new WListBox( this, IDLB_TERRAINS );
+ 		TerrainsList->OpenWindow( 1, 0, 0, 0, 1 );
+-		NewTerrainButton = new WButton( this, IDPB_TERRAIN_NEW, FDelegate(this,(TDelegate)OnNewTerrain) );
++		NewTerrainButton = new WButton( this, IDPB_TERRAIN_NEW, FDelegate(this,(TDelegate)&WPageToolsTerrains::OnNewTerrain) );
+ 		NewTerrainButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("N") );
+ 
+ 		PlaceControl( TerrainsList );
+@@ -63,8 +63,8 @@ class WPageToolsTerrains : public WPropertyPage
+ 
+ 		Finalize();
+ 
+-		TerrainsList->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnTerrainsSelectionChange);
+-		TerrainsList->DoubleClickDelegate = FDelegate(this, (TDelegate)OnTerrainsDblClick);
++		TerrainsList->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WPageToolsTerrains::OnTerrainsSelectionChange);
++		TerrainsList->DoubleClickDelegate = FDelegate(this, (TDelegate)&WPageToolsTerrains::OnTerrainsDblClick);
+ 
+ 		NewTerrainButton->SetBitmap( NewBitmap );
+ 
+@@ -303,19 +303,19 @@ class WPageToolsLayers : public WPropertyPage
+ 		WPropertyPage::OpenWindow( InDlgId, InHMOD );
+ 
+ 		// Create child controls and let the base class determine their proper positions.
+-		NewButton = new WButton( this, IDPB_NEW, FDelegate(this,(TDelegate)OnNew) );
++		NewButton = new WButton( this, IDPB_NEW, FDelegate(this,(TDelegate)&WPageToolsLayers::OnNew) );
+ 		NewButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("N") );
+-		DeleteButton = new WButton( this, IDPB_DELETE, FDelegate(this,(TDelegate)OnDelete) );
++		DeleteButton = new WButton( this, IDPB_DELETE, FDelegate(this,(TDelegate)&WPageToolsLayers::OnDelete) );
+ 		DeleteButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("X") );
+-		DuplicateButton = new WButton( this, IDPB_DUPLICATE, FDelegate(this,(TDelegate)OnDuplicate) );
++		DuplicateButton = new WButton( this, IDPB_DUPLICATE, FDelegate(this,(TDelegate)&WPageToolsLayers::OnDuplicate) );
+ 		DuplicateButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("D") );
+-		MoveUpButton = new WButton( this, IDPB_MOVE_UP, FDelegate(this,(TDelegate)OnMoveUp) );
++		MoveUpButton = new WButton( this, IDPB_MOVE_UP, FDelegate(this,(TDelegate)&WPageToolsLayers::OnMoveUp) );
+ 		MoveUpButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("+") );
+-		MoveDownButton = new WButton( this, IDPB_MOVE_DOWN, FDelegate(this,(TDelegate)OnMoveDown) );
++		MoveDownButton = new WButton( this, IDPB_MOVE_DOWN, FDelegate(this,(TDelegate)&WPageToolsLayers::OnMoveDown) );
+ 		MoveDownButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("-") );
+ 		LayerScrollBar = new WScrollBar( this, IDSB_LAYERS );
+ 		LayerScrollBar->OpenWindow( 1, 0, 0, 10, 10 );
+-		ShowGridButton = new WButton( this, IDPB_SHOW_GRID, FDelegate(this,(TDelegate)OnShowGrid) );
++		ShowGridButton = new WButton( this, IDPB_SHOW_GRID, FDelegate(this,(TDelegate)&WPageToolsLayers::OnShowGrid) );
+ 		ShowGridButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("-") );
+ 
+ 		PlaceControl( NewButton );
+@@ -516,7 +516,7 @@ class WPageToolsLayers : public WPropertyPage
+ 					mif.wID = IDMN_LAYER_BASE + x;
+ 					InsertMenuItemA( submenu, 999, TRUE, &mif );
+ 
+-					INT Power = appPow( 2, x );
++					INT Power = (INT)appPow( (DOUBLE)2, (DOUBLE)x );
+ 					CheckMenuItem( submenu, mif.wID, MF_BYCOMMAND | ( (TI->ShowGrid & Power) ? MF_CHECKED : MF_UNCHECKED) );
+ 				}
+ 			}
+@@ -588,7 +588,7 @@ class WPageToolsLayers : public WPropertyPage
+ 			{
+ 				ATerrainInfo* TI = GTerrainTools.GetCurrentTerrainInfo();
+ 				if( TI )
+-					TI->ShowGrid ^= (INT)appPow( 2, Command - IDMN_LAYER_BASE );
++					TI->ShowGrid ^= (INT)appPow( (DOUBLE)2, (DOUBLE)(Command - IDMN_LAYER_BASE) );
+ 				GEditor->RedrawLevel( GEditor->Level );
+ 			}
+ 			break;
+@@ -774,15 +774,15 @@ class WPageToolsDecoLayers : public WPropertyPage
+ 		WPropertyPage::OpenWindow( InDlgId, InHMOD );
+ 
+ 		// Create child controls and let the base class determine their proper positions.
+-		NewButton = new WButton( this, IDPB_NEW, FDelegate(this,(TDelegate)OnNew) );
++		NewButton = new WButton( this, IDPB_NEW, FDelegate(this,(TDelegate)&WPageToolsDecoLayers::OnNew) );
+ 		NewButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("N") );
+-		DeleteButton = new WButton( this, IDPB_DELETE, FDelegate(this,(TDelegate)OnDelete) );
++		DeleteButton = new WButton( this, IDPB_DELETE, FDelegate(this,(TDelegate)&WPageToolsDecoLayers::OnDelete) );
+ 		DeleteButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("X") );
+-		DuplicateButton = new WButton( this, IDPB_DUPLICATE, FDelegate(this,(TDelegate)OnDuplicate) );
++		DuplicateButton = new WButton( this, IDPB_DUPLICATE, FDelegate(this,(TDelegate)&WPageToolsDecoLayers::OnDuplicate) );
+ 		DuplicateButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("D") );
+ 		LayerScrollBar = new WScrollBar( this, IDSB_LAYERS );
+ 		LayerScrollBar->OpenWindow( 1, 0, 0, 10, 10 );
+-		ShowOnTerrainButton = new WButton( this, IDPB_SHOW_ON_TERRAIN, FDelegate(this,(TDelegate)OnShowOnTerrain) );
++		ShowOnTerrainButton = new WButton( this, IDPB_SHOW_ON_TERRAIN, FDelegate(this,(TDelegate)&WPageToolsDecoLayers::OnShowOnTerrain) );
+ 		ShowOnTerrainButton->OpenWindow( 1, 0, 0, 10, 10, TEXT("-") );
+ 		ShowAlphaLayerCheck = new WCheckBox( this, IDCK_DISPLAY_ALPHA_LAYER );
+ 		ShowAlphaLayerCheck->OpenWindow( 1, 0, 0, 0, 0, TEXT("") );
+@@ -796,7 +796,7 @@ class WPageToolsDecoLayers : public WPropertyPage
+ 
+ 		Finalize();
+ 
+-		ShowAlphaLayerCheck->ClickDelegate = FDelegate(this, (TDelegate)OnShowAlphaLayerClick);
++		ShowAlphaLayerCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageToolsDecoLayers::OnShowAlphaLayerClick);
+ 
+ 		ShowOnTerrainButton->SetBitmap( ShowOnTerrainBitmap );
+ 
+@@ -1371,22 +1371,22 @@ class WPageTools : public WPropertyPage
+ 		RefreshToolValues();
+ 
+ 		// Delegates.
+-		SelectButton->ClickDelegate = FDelegate(this, (TDelegate)OnSelectClick);
+-		UndoButton->ClickDelegate = FDelegate(this, (TDelegate)OnResetMoveClick);
+-		InnerRadiusBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)InnerRadiusPosChange);
+-		InnerRadiusBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)InnerRadiusPosChange);
+-		OuterRadiusBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)OuterRadiusPosChange);
+-		OuterRadiusBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)OuterRadiusPosChange);
+-		StrengthBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)StrengthPosChange);
+-		StrengthBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)StrengthPosChange);
+-		AutoSoftSelCheck->ClickDelegate = FDelegate(this, (TDelegate)OnAutoSoftSelClick);
+-		PerToolCheck->ClickDelegate = FDelegate(this, (TDelegate)OnPerToolClick);
+-		LockSlidersCheck->ClickDelegate = FDelegate(this, (TDelegate)OnLockSlidersClick);
+-		BrushesList->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnTypesSelChange);
+-		AdjustEdit->ChangeDelegate = FDelegate(this, (TDelegate)OnAdjustChange);
+-		MirrorCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnMirrorSelChange);
+-		ColorButton->ClickDelegate = FDelegate(this, (TDelegate)OnColorClicked);
+-		IgnoreInvisQuadsCheck->ClickDelegate = FDelegate(this, (TDelegate)OnIgnoreInvisibleQuadsClick);
++		SelectButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageTools::OnSelectClick);
++		UndoButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageTools::OnResetMoveClick);
++		InnerRadiusBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)&WPageTools::InnerRadiusPosChange);
++		InnerRadiusBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)&WPageTools::InnerRadiusPosChange);
++		OuterRadiusBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)&WPageTools::OuterRadiusPosChange);
++		OuterRadiusBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)&WPageTools::OuterRadiusPosChange);
++		StrengthBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)&WPageTools::StrengthPosChange);
++		StrengthBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)&WPageTools::StrengthPosChange);
++		AutoSoftSelCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageTools::OnAutoSoftSelClick);
++		PerToolCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageTools::OnPerToolClick);
++		LockSlidersCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageTools::OnLockSlidersClick);
++		BrushesList->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WPageTools::OnTypesSelChange);
++		AdjustEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WPageTools::OnAdjustChange);
++		MirrorCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WPageTools::OnMirrorSelChange);
++		ColorButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageTools::OnColorClicked);
++		IgnoreInvisQuadsCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageTools::OnIgnoreInvisibleQuadsClick);
+ 
+ 		LockSlidersCheck->SetBitmap( LockSlidersBitmap );
+ 
+@@ -1661,9 +1661,9 @@ class WPageMisc : public WPropertyPage
+ 		UseEntireHeightmapCheck->SetCheck( bUseEntireHeightmap );
+ 
+ 		// Delegates.
+-		MoveActorsCheck->ClickDelegate = FDelegate(this, (TDelegate)OnMoveActorsClick);
+-		UseEntireHeightmapCheck->ClickDelegate = FDelegate(this, (TDelegate)OnUseEntireHeightmapClick);
+-		BuildButton->ClickDelegate = FDelegate(this, (TDelegate)OnBuildClick);
++		MoveActorsCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageMisc::OnMoveActorsClick);
++		UseEntireHeightmapCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageMisc::OnUseEntireHeightmapClick);
++		BuildButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageMisc::OnBuildClick);
+ 
+ 		StepsEdit->SetText(TEXT("5"));
+ 		StrengthEdit->SetText(TEXT("250"));
+@@ -1968,7 +1968,7 @@ class WTerrainEditSheet : public WWindow
+ 			{
+ 				ATerrainInfo* TI = GTerrainTools.GetCurrentTerrainInfo();
+ 				if( TI && GTerrainTools.CurrentLayer > -1 )
+-					TI->ShowGrid ^= (INT)appPow( 2, GTerrainTools.CurrentLayer-1 );
++					TI->ShowGrid ^= (INT)appPow( (DOUBLE)2, (DOUBLE)(GTerrainTools.CurrentLayer-1) );
+ 				GEditor->RedrawLevel( GEditor->Level );
+ 			}
+ 			break;
+diff --git a/UnrealEd/Src/BrowserAnimation.cpp b/UnrealEd/Src/BrowserAnimation.cpp
+index aa2f91a..ffe53a6 100644
+--- a/UnrealEd/Src/BrowserAnimation.cpp
++++ b/UnrealEd/Src/BrowserAnimation.cpp
+@@ -218,8 +218,8 @@ class WDlgNewMesh : public WDialog
+ 	// Constructor.
+ 	WDlgNewMesh( UObject* InContext, WBrowser* InOwnerWindow, UBOOL ImportAnimFlag, UBOOL AnimAppendFlag )
+ 		:	WDialog			( TEXT("New Mesh/Animation"), IDDIALOG_IMPORT_MESH, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgNewMesh::OnOk) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgNewMesh::EndDialogFalse) )
+ 	,	PackageEdit		( this, IDEC_PACKAGE )
+ 	,	NameEdit		( this, IDEC_NAME )
+ 	,   MayaCheck       ( this, IDCK_MAYACOORDS )
+@@ -357,7 +357,7 @@ class WDlgShowInfo : public WDialog
+ 	// Constructor.
+ 	WDlgShowInfo( UObject* InContext, WBrowser* InOwnerWindow, USkeletalMeshInstance* MInst, UMeshAnimation* Anim, FName SeqName )
+ 		:	WDialog			( TEXT("Mesh/Animation size info"), IDDIALOG_ANIM_INFO, InOwnerWindow )		
+-	,	OkButton	   ( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
++	,	OkButton	   ( this, IDOK,			FDelegate(this,(TDelegate)&WDlgShowInfo::OnOk) )
+ 	,	MeshName	   ( this, IDC_MESHNAME)
+ 	,	AnimName       ( this, IDC_CURANIMNAME)
+ 	,   LODRenderSize  ( this, IDC_CURRENTLODRENDSIZE)
+@@ -697,19 +697,19 @@ void WBrowserAnimation::OnCreate()
+ 	//
+ 	ComboPackage = new WComboBox( this, IDCB_PACKAGE );
+ 	ComboPackage->OpenWindow( 1, 1 );
+-	ComboPackage->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnPackageSelectionChange);
++	ComboPackage->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserAnimation::OnPackageSelectionChange);
+ 	
+ 	// Mesh selection
+ 	//
+ 	MeshCombo = new WComboBox( this, IDCB_MESH );
+ 	MeshCombo->OpenWindow( 1, 0 );  // UNsorted listbox.
+-	MeshCombo->SelectionChangeDelegate    = FDelegate(this,(TDelegate)OnMeshSelectionChange );
++	MeshCombo->SelectionChangeDelegate    = FDelegate(this,(TDelegate)&WBrowserAnimation::OnMeshSelectionChange );
+ 	
+ 	// Animation combo
+ 	//
+ 	AnimCombo = new WComboBox( this, IDCB_ANIM );
+ 	AnimCombo->OpenWindow( 1, 0); // 2nd parameter = false: unsorted.
+-	AnimCombo->SelectionChangeDelegate    = FDelegate(this,(TDelegate)OnAnimObjectSelectionChange);
++	AnimCombo->SelectionChangeDelegate    = FDelegate(this,(TDelegate)&WBrowserAnimation::OnAnimObjectSelectionChange);
+ 
+ 	// Splitter
+ 	//
+@@ -724,21 +724,21 @@ void WBrowserAnimation::OnCreate()
+ 	ViewportLabel->OpenWindow( 1, 0 );
+ 
+ 	// Play buttons.
+-	ScrubButtonPlay = new WButton( SplitterContainer->Pane1, IDBT_SCRUBPLAY, FDelegate(this,(TDelegate)OnScrubPlay) );
++	ScrubButtonPlay = new WButton( SplitterContainer->Pane1, IDBT_SCRUBPLAY, FDelegate(this,(TDelegate)&WBrowserAnimation::OnScrubPlay) );
+ 	ScrubButtonPlay->OpenWindow( 1, 0, 0, SBTSIZE, SBTSIZE, NULL, 0, BS_OWNERDRAW );
+ 	SetClassLongX( *ScrubButtonPlay, GCL_STYLE, GetClassLongX(*ScrubButtonPlay,GCL_STYLE) & ~CS_DBLCLKS);
+-	ScrubButtonBegin = new WButton( SplitterContainer->Pane1, IDBT_SCRUBBEGIN, FDelegate(this,(TDelegate)OnScrubBegin) );
++	ScrubButtonBegin = new WButton( SplitterContainer->Pane1, IDBT_SCRUBBEGIN, FDelegate(this,(TDelegate)&WBrowserAnimation::OnScrubBegin) );
+ 	ScrubButtonBegin->OpenWindow( 1, 0, 0, SBTSIZE, SBTSIZE, NULL, 0, BS_OWNERDRAW );
+-	ScrubButtonEnd = new WButton( SplitterContainer->Pane1, IDBT_SCRUBEND, FDelegate(this,(TDelegate)OnScrubEnd) );
++	ScrubButtonEnd = new WButton( SplitterContainer->Pane1, IDBT_SCRUBEND, FDelegate(this,(TDelegate)&WBrowserAnimation::OnScrubEnd) );
+ 	ScrubButtonEnd->OpenWindow( 1, 0, 0, SBTSIZE, SBTSIZE, NULL, 0, BS_OWNERDRAW );
+ 
+-	ScrubButtonForward = new WButton( SplitterContainer->Pane1, IDBT_SCRUBEND, FDelegate(this,(TDelegate)OnScrubForward) );
++	ScrubButtonForward = new WButton( SplitterContainer->Pane1, IDBT_SCRUBEND, FDelegate(this,(TDelegate)&WBrowserAnimation::OnScrubForward) );
+ 	ScrubButtonForward->OpenWindow( 1, 0, 0, SBTSIZE, SBTSIZE, NULL, 0, BS_OWNERDRAW );
+ 	SetClassLongX( *ScrubButtonForward, GCL_STYLE, GetClassLongX(*ScrubButtonForward,GCL_STYLE) & ~CS_DBLCLKS);
+-	ScrubButtonBackward = new WButton( SplitterContainer->Pane1, IDBT_SCRUBEND, FDelegate(this,(TDelegate)OnScrubBackward) );
++	ScrubButtonBackward = new WButton( SplitterContainer->Pane1, IDBT_SCRUBEND, FDelegate(this,(TDelegate)&WBrowserAnimation::OnScrubBackward) );
+ 	ScrubButtonBackward->OpenWindow( 1, 0, 0, SBTSIZE, SBTSIZE, NULL, 0, BS_OWNERDRAW );
+ 	SetClassLongX( *ScrubButtonBackward, GCL_STYLE, GetClassLongX(*ScrubButtonBackward,GCL_STYLE) & ~CS_DBLCLKS);
+-	ScrubButtonLoop = new WButton( SplitterContainer->Pane1, IDBT_SCRUBEND, FDelegate(this,(TDelegate)OnScrubLoop) );
++	ScrubButtonLoop = new WButton( SplitterContainer->Pane1, IDBT_SCRUBEND, FDelegate(this,(TDelegate)&WBrowserAnimation::OnScrubLoop) );
+ 	ScrubButtonLoop->OpenWindow( 1, 0, 0, SBTSIZE, SBTSIZE, NULL, 0, BS_OWNERDRAW );
+ 	SetClassLongX( *ScrubButtonLoop, GCL_STYLE, GetClassLongX(*ScrubButtonLoop,GCL_STYLE) & ~CS_DBLCLKS);
+ 			
+@@ -756,8 +756,8 @@ void WBrowserAnimation::OnCreate()
+ 	ScrubBar->ManualTicks = 1;
+ 	ScrubBar->OpenWindow( 1, 0 );
+ 	ScrubBar->SetRange( 0, SCRUBBARRANGE );
+-	ScrubBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)OnSliderMove ); 
+-	ScrubBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)OnSliderMove );    
++	ScrubBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)&WBrowserAnimation::OnSliderMove ); 
++	ScrubBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)&WBrowserAnimation::OnSliderMove );    
+ 
+ 	// Create the mesh viewport
+ 	AnimBrowserLevel = new( UObject::GetTransientPackage(), TEXT("AnimBrowserLevel") )ULevel( GUnrealEd, 0 );
+@@ -774,9 +774,9 @@ void WBrowserAnimation::OnCreate()
+ 	// Create the Animation Sequence List
+ 	AnimSeqList = new WListBox( this, IDLB_ANIMATIONS );
+ 	AnimSeqList->OpenWindow( 1, 0, 0, 0, 0, WS_VSCROLL );
+-	AnimSeqList->SelectionChangeDelegate  = FDelegate(this,(TDelegate)OnAnimSequenceSelectionChange);
+-	AnimSeqList->DoubleClickDelegate  = FDelegate(this,(TDelegate)OnAnimSequenceDoubleClick);		
+-	AnimSeqList->RightClickDelegate  = FDelegate(this,(TDelegate)OnAnimSequenceRightClick);		
++	AnimSeqList->SelectionChangeDelegate  = FDelegate(this,(TDelegate)&WBrowserAnimation::OnAnimSequenceSelectionChange);
++	AnimSeqList->DoubleClickDelegate  = FDelegate(this,(TDelegate)&WBrowserAnimation::OnAnimSequenceDoubleClick);		
++	AnimSeqList->RightClickDelegate  = FDelegate(this,(TDelegate)&WBrowserAnimation::OnAnimSequenceRightClick);		
+ 	//AnimSeqList->Root.Sorted = 0;
+ 	SendMessageX( AnimSeqList->hWnd, LB_SETCOLUMNWIDTH, 96, 0 );
+ 
+@@ -787,11 +787,11 @@ void WBrowserAnimation::OnCreate()
+ 
+ 
+ 	// Animation sequence sort buttons.	
+-	ApplySequenceSort = new WCheckBox( this, IDBT_DOSEQSORT1, FDelegate(this,(TDelegate)OnApplySequenceSort) );
++	ApplySequenceSort = new WCheckBox( this, IDBT_DOSEQSORT1, FDelegate(this,(TDelegate)&WBrowserAnimation::OnApplySequenceSort) );
+ 	ApplySequenceSort->OpenWindow( 1, 0, 0, 1, 1, TEXT("sort"),1, 0, BS_PUSHLIKE ); 
+-	MoveSequenceUp = new WCheckBox( this, IDBT_DOSEQSORT2, FDelegate(this,(TDelegate)OnMoveSequenceUp) );
++	MoveSequenceUp = new WCheckBox( this, IDBT_DOSEQSORT2, FDelegate(this,(TDelegate)&WBrowserAnimation::OnMoveSequenceUp) );
+ 	MoveSequenceUp->OpenWindow( 1, 0, 0, 1, 1, TEXT("up"), 1, 0, BS_PUSHLIKE );	
+-	MoveSequenceDown = new WCheckBox( this, IDBT_DOSEQSORT3, FDelegate(this,(TDelegate)OnMoveSequenceDown) );
++	MoveSequenceDown = new WCheckBox( this, IDBT_DOSEQSORT3, FDelegate(this,(TDelegate)&WBrowserAnimation::OnMoveSequenceDown) );
+ 	MoveSequenceDown->OpenWindow( 1, 0, 0, 1, 1, TEXT("down"), 1, 0, BS_PUSHLIKE );	
+ 	
+ 	// Property editors
+diff --git a/UnrealEd/Src/BrowserLIPSinc.cpp b/UnrealEd/Src/BrowserLIPSinc.cpp
+index a1bfce3..72e881f 100644
+--- a/UnrealEd/Src/BrowserLIPSinc.cpp
++++ b/UnrealEd/Src/BrowserLIPSinc.cpp
+@@ -261,8 +261,8 @@ class WDlgNameLIPSincAnimation : public WDialog
+ 	WDlgNameLIPSincAnimation( UObject* InContext, WBrowser* InOwnerWindow )
+ 		: WDialog		( TEXT("Name LIPSinc Animation"), IDDIALOG_NAME_LIPSINC_ANIMATION, InOwnerWindow )
+ 	, NameEdit			( this, IDC_NEW_LIPSINC_ANIM_NAME )
+-	, OkButton          ( this, IDOK, FDelegate(this,(TDelegate)OnOk) )
+-	, CancelButton		( this, IDCANCEL, FDelegate(this,(TDelegate)OnCancel) )
++	, OkButton          ( this, IDOK, FDelegate(this,(TDelegate)&WDlgNameLIPSincAnimation::OnOk) )
++	, CancelButton		( this, IDCANCEL, FDelegate(this,(TDelegate)&WDlgNameLIPSincAnimation::OnCancel) )
+ 	{
+ 	}
+ 	
+@@ -332,8 +332,8 @@ class WDlgDeleteLIPSincExpression : public WDialog
+ 	// Constructor.
+ 	WDlgDeleteLIPSincExpression( UObject* InContext, WBrowser* InOwnerWindow )
+ 		:	WDialog		  ( TEXT("Delete Expression"), IDDIALOG_LIPSINC_DELETE_EXPRESSION, InOwnerWindow )
+-	,	OkButton		  ( this, IDOK,	FDelegate(this,(TDelegate)OnOk) )
+-	,	DeleteButton	  ( this, ID_LIPSINC_DELETE_EXPRESSION,	FDelegate(this,(TDelegate)OnDeleteExpression) )
++	,	OkButton		  ( this, IDOK,	FDelegate(this,(TDelegate)&WDlgDeleteLIPSincExpression::OnOk) )
++	,	DeleteButton	  ( this, ID_LIPSINC_DELETE_EXPRESSION,	FDelegate(this,(TDelegate)&WDlgDeleteLIPSincExpression::OnDeleteExpression) )
+ 	,	ExpressionList	  ( this, ID_LIPSINC_EXPRESSION_LIST )
+ 	,   pLIPSincController( NULL )
+ 	,   pMeshInstance     ( NULL )
+@@ -464,17 +464,17 @@ class WDlgCreateLIPSincAnim : public WDialog
+ 	// Constructor.
+ 	WDlgCreateLIPSincAnim( UObject* InContext, WBrowser* InOwnerWindow )
+ 		:	WDialog		  ( TEXT("Create New LIPSinc Animation"), IDDIALOG_CREATE_LIPSINC_ANIM, InOwnerWindow )
+-	,	OkButton		  ( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	  ( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		  ( this, IDOK,			FDelegate(this,(TDelegate)&WDlgCreateLIPSincAnim::OnOk) )
++	,	CancelButton	  ( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgCreateLIPSincAnim::EndDialogFalse) )
+ 	,	SoundPackageCombo ( this, IDC_SOUNDPACKAGE )
+ 	,	NameEdit		  ( this, IDEC_NAME )
+ 	,   TextCheck         ( this, IDCK_USETEXT )
+ 	,   ImportAudioCheck  ( this, IDCK_IMPORTAUDIO )
+ 	,	TextToProcess	  ( this, IDC_TEXTTOPROCESS )
+-	,	LoadTextButton    ( this, IDC_LOADTEXT,	FDelegate(this,(TDelegate)OnLoadText) )
+-	,	SaveTextButton	  ( this, IDC_SAVETEXT, FDelegate(this,(TDelegate)OnSaveText) )
++	,	LoadTextButton    ( this, IDC_LOADTEXT,	FDelegate(this,(TDelegate)&WDlgCreateLIPSincAnim::OnLoadText) )
++	,	SaveTextButton	  ( this, IDC_SAVETEXT, FDelegate(this,(TDelegate)&WDlgCreateLIPSincAnim::OnSaveText) )
+ 	,   FilenameLabel	  ( this, IDS_FILENAME )
+-	,	PlayButton		  ( this, IDB_LIPSINC_PLAY, FDelegate(this,(TDelegate)OnPlayButton) )
++	,	PlayButton		  ( this, IDB_LIPSINC_PLAY, FDelegate(this,(TDelegate)&WDlgCreateLIPSincAnim::OnPlayButton) )
+ 	{
+ 	}
+ 
+@@ -739,8 +739,8 @@ class WDlgCreateLIPSincAnimBatch : public WDialog
+ 	// Constructor.
+ 	WDlgCreateLIPSincAnimBatch( UObject* InContext, WBrowser* InOwnerWindow )
+ 		:	WDialog		  ( TEXT("Batch Create New LIPSinc Animations"), IDDIALOG_CREATE_LIPSINC_ANIM_BATCH, InOwnerWindow )
+-	,	OkButton		  ( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	  ( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		  ( this, IDOK,			FDelegate(this,(TDelegate)&WDlgCreateLIPSincAnimBatch::OnOk) )
++	,	CancelButton	  ( this, IDCANCEL,		FDelegate(this,(TDelegate)&WDlgCreateLIPSincAnimBatch::EndDialogFalse) )
+ 	,	SoundPackageCombo ( this, IDC_SOUNDPACKAGE )
+ 	,   TextCheck         ( this, IDCK_USETEXT )
+ 	,   ImportAudioCheck  ( this, IDCK_IMPORTAUDIO )
+@@ -898,7 +898,7 @@ class WDlgLIPSincControllerInfo : public WDialog
+ 		, BonePoseSize			  ( this, ID_LIPS_BONE_POSE_SIZE )
+ 		, NumExpressions		  ( this, ID_LIPS_NUM_EXPRESSIONS )
+ 		, ExpressionsSize		  ( this, ID_LIPS_EXPRESSIONS_SIZE )
+-		, OkButton			      ( this, IDOK, FDelegate(this,(TDelegate)OnOkButton) )
++		, OkButton			      ( this, IDOK, FDelegate(this,(TDelegate)&WDlgLIPSincControllerInfo::OnOkButton) )
+ 		, VersionInfo			  ( this, ID_VERSIONINFO )
+ 	{
+ 		LIPSincController = controller;
+@@ -1116,19 +1116,19 @@ void WBrowserLIPSinc::OnCreate()
+ 	//
+ 	PackageCombo = new WComboBox( this, IDCB_PACKAGE );
+ 	PackageCombo->OpenWindow( 1, 1 );
+-	PackageCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnPackageSelectionChange);
++	PackageCombo->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WBrowserLIPSinc::OnPackageSelectionChange);
+ 	
+ 	// Mesh selection
+ 	//
+ 	MeshCombo = new WComboBox( this, IDCB_MESH );
+ 	MeshCombo->OpenWindow( 1, 1 );  // Sorted listbox
+-	MeshCombo->SelectionChangeDelegate    = FDelegate(this,(TDelegate)OnMeshSelectionChange );
++	MeshCombo->SelectionChangeDelegate    = FDelegate(this,(TDelegate)&WBrowserLIPSinc::OnMeshSelectionChange );
+ 	
+ 	LIPSincAnimList = new WListBox( this, IDLB_ANIMATIONS );
+ 	LIPSincAnimList->OpenWindow( 1, 0, 0, 0, 0, WS_VSCROLL );
+-	LIPSincAnimList->DoubleClickDelegate     = FDelegate(this,(TDelegate)OnLIPSincAnimListDoubleClick);		
+-	LIPSincAnimList->RightClickDelegate      = FDelegate(this,(TDelegate)OnLIPSincAnimListRightClick);	
+-	LIPSincAnimList->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnLIPSincAnimListSelectionChange);
++	LIPSincAnimList->DoubleClickDelegate     = FDelegate(this,(TDelegate)&WBrowserLIPSinc::OnLIPSincAnimListDoubleClick);		
++	LIPSincAnimList->RightClickDelegate      = FDelegate(this,(TDelegate)&WBrowserLIPSinc::OnLIPSincAnimListRightClick);	
++	LIPSincAnimList->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WBrowserLIPSinc::OnLIPSincAnimListSelectionChange);
+ 	SendMessageX( LIPSincAnimList->hWnd, LB_SETCOLUMNWIDTH, 96, 0 );
+ 		
+ 	SplitterContainer = new WSplitterContainer( this );
+@@ -1136,23 +1136,23 @@ void WBrowserLIPSinc::OnCreate()
+ 	SplitterContainer->ParentContainer = &Container;
+ 	SplitterContainer->SetPct( 70 );
+ 
+-	BlendWithCheck = new WCheckBox( this, IDC_BLENDWITH, FDelegate(this, (TDelegate)OnBlendWithChange));
++	BlendWithCheck = new WCheckBox( this, IDC_BLENDWITH, FDelegate(this, (TDelegate)&WBrowserLIPSinc::OnBlendWithChange));
+ 	BlendWithCheck->OpenWindow(1, 0, 0, 0, 0, TEXT("Blend with:"));
+ 
+ 	UnrealAnimPackageCombo = new WComboBox(this, IDCB_BLENDWITHPACKAGE);
+ 	UnrealAnimPackageCombo->OpenWindow(1, 0);
+-	UnrealAnimPackageCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnUnrealAnimPackageSelectionChange);
++	UnrealAnimPackageCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WBrowserLIPSinc::OnUnrealAnimPackageSelectionChange);
+ 
+ 	UnrealAnimCombo = new WComboBox(this, IDCB_BLENDWITH);
+ 	UnrealAnimCombo->OpenWindow(1, 0);
+-	UnrealAnimCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnUnrealAnimListSelectionChange);
++	UnrealAnimCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WBrowserLIPSinc::OnUnrealAnimListSelectionChange);
+ 
+ 	// Associate bitmaps with buttons
+-	PlayButton = new WButton(this, IDB_PLAYLIPSINC, FDelegate(this, (TDelegate)OnPlayButton) );
++	PlayButton = new WButton(this, IDB_PLAYLIPSINC, FDelegate(this, (TDelegate)&WBrowserLIPSinc::OnPlayButton) );
+ 	PlayButton->OpenWindow( 1, 0, 0, 16, 16, NULL, 0, BS_OWNERDRAW );
+ 	PlayButton->SetBitmap( PlayBitmap );
+ 
+-	StopButton = new WButton(this, IDB_STOPLIPSINC, FDelegate(this, (TDelegate)OnStopButton) );
++	StopButton = new WButton(this, IDB_STOPLIPSINC, FDelegate(this, (TDelegate)&WBrowserLIPSinc::OnStopButton) );
+ 	StopButton->OpenWindow( 1, 0, 0, 16, 16, NULL, 0, BS_OWNERDRAW );
+ 	StopButton->SetBitmap( StopBitmap );
+ 
+@@ -1177,8 +1177,8 @@ void WBrowserLIPSinc::OnCreate()
+ 	ScrubBar->ManualTicks = 1;
+ 	ScrubBar->OpenWindow( 1, 0 );
+ 	ScrubBar->SetRange( 0, 10000 );
+-	ScrubBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)OnSliderMove );
+-	ScrubBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)OnSliderMove );
++	ScrubBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)&WBrowserLIPSinc::OnSliderMove );
++	ScrubBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)&WBrowserLIPSinc::OnSliderMove );
+ 
+ 	ViewportLabel = new WLabel( SplitterContainer->Pane1, IDCS_LIPSVIEWPORT );
+ 	ViewportLabel->OpenWindow(1, 0);
+@@ -3916,4 +3916,4 @@ void WBrowserLIPSinc::OnPaint( )
+ 	unguard;
+ }
+ 
+-#endif
+\ No newline at end of file
++#endif
+diff --git a/UnrealEd/Src/BuildPropSheet.cpp b/UnrealEd/Src/BuildPropSheet.cpp
+index e2d0f6a..41bcc17 100644
+--- a/UnrealEd/Src/BuildPropSheet.cpp
++++ b/UnrealEd/Src/BuildPropSheet.cpp
+@@ -125,28 +125,28 @@ void WPageOptions::OpenWindow( INT InDlgId, HMODULE InHMOD )
+ 	Finalize();
+ 
+ 	// Delegates.
+-	GeomCheck->ClickDelegate = FDelegate(this, (TDelegate)OnGeomClick);
+-	BSPCheck->ClickDelegate = FDelegate(this, (TDelegate)OnBSPClick);
+-	LightingCheck->ClickDelegate = FDelegate(this, (TDelegate)OnLightingClick);
+-	DefinePathsCheck->ClickDelegate = FDelegate(this, (TDelegate)OnDefinePathsClick);
+-	BuildOnlyVisibleCheck->ClickDelegate = FDelegate(this, (TDelegate)OnBuildOnlyVisibleClick);
+-	BuildButton->ClickDelegate = FDelegate(this, (TDelegate)OnBuildClick);
+-	BuildPathsButton->ClickDelegate = FDelegate(this, (TDelegate)OnBuildPathsClick);
+-	PathsChangedButton->ClickDelegate = FDelegate(this, (TDelegate)OnPathsChangedClick);
+-	BalanceBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)OnBalanceBarMove);
+-	BalanceBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)OnBalanceBarMove);
+-	PortalBiasBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)OnPortalBiasBarMove);
+-	PortalBiasBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)OnPortalBiasBarMove);
+-	SaveButton->ClickDelegate = FDelegate(this, (TDelegate)OnSaveClick);
+-	DeleteButton->ClickDelegate = FDelegate(this, (TDelegate)OnDeleteClick);
+-	ConfigCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnConfigComboSelChange);
+-	LightmapCompressionCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)OnLightmapCompressionComboSelChange);
+-	DitherLightmapsCheck->ClickDelegate = FDelegate(this, (TDelegate)OnDitherLightmaps);
+-	SaveLightmapsCheck->ClickDelegate = FDelegate(this, (TDelegate)OnSaveLightmaps);
+-	LameButton->ClickDelegate = FDelegate(this, (TDelegate)OnLameClicked);
+-	GoodButton->ClickDelegate = FDelegate(this, (TDelegate)OnGoodClicked);
+-	OptimalButton->ClickDelegate = FDelegate(this, (TDelegate)OnOptimalClicked);
+-	ReportErrorsCheck->ClickDelegate = FDelegate(this, (TDelegate)OnReportErrors);
++	GeomCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnGeomClick);
++	BSPCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnBSPClick);
++	LightingCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnLightingClick);
++	DefinePathsCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnDefinePathsClick);
++	BuildOnlyVisibleCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnBuildOnlyVisibleClick);
++	BuildButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnBuildClick);
++	BuildPathsButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnBuildPathsClick);
++	PathsChangedButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnPathsChangedClick);
++	BalanceBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnBalanceBarMove);
++	BalanceBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnBalanceBarMove);
++	PortalBiasBar->ThumbTrackDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnPortalBiasBarMove);
++	PortalBiasBar->ThumbPositionDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnPortalBiasBarMove);
++	SaveButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnSaveClick);
++	DeleteButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnDeleteClick);
++	ConfigCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WPageOptions::OnConfigComboSelChange);
++	LightmapCompressionCombo->SelectionChangeDelegate = FDelegate(this,(TDelegate)&WPageOptions::OnLightmapCompressionComboSelChange);
++	DitherLightmapsCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnDitherLightmaps);
++	SaveLightmapsCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnSaveLightmaps);
++	LameButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnLameClicked);
++	GoodButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnGoodClicked);
++	OptimalButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnOptimalClicked);
++	ReportErrorsCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageOptions::OnReportErrors);
+ 
+ 	BalanceBar->SetRange( 1, 100 );
+ 	BalanceBar->SetTicFreq( 10 );
+@@ -643,7 +643,7 @@ void WPageLevelStats::OpenWindow( INT InDlgId, HMODULE InHMOD )
+ 	Finalize();
+ 
+ 	// Delegates.
+-	RefreshButton->ClickDelegate = FDelegate(this, (TDelegate)Refresh);
++	RefreshButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageLevelStats::Refresh);
+ 
+ 	// Initialize controls.
+ 
+diff --git a/UnrealEd/Src/DlgArray.h b/UnrealEd/Src/DlgArray.h
+index bef623b..dec38f0 100644
+--- a/UnrealEd/Src/DlgArray.h
++++ b/UnrealEd/Src/DlgArray.h
+@@ -25,8 +25,8 @@ class WDlgArray : public WDialog
+ 	// Constructor.
+ 	WDlgArray( UObject* InContext, WWindow* InOwnerWindow )
+ 		:	WDialog			( TEXT("Search for Actors"), IDDIALOG_SEARCH, InOwnerWindow )
+-		,	CloseButton		( this, IDPB_CLOSE,		FDelegate(this,(TDelegate)OnClose) )
+-		,	OkButton		( this, IDPB_OK,		FDelegate(this,(TDelegate)OnOk) )
++		,	CloseButton		( this, IDPB_CLOSE,		FDelegate(this,(TDelegate)&WDlgArray::OnClose) )
++		,	OkButton		( this, IDPB_OK,		FDelegate(this,(TDelegate)&WDlgArray::OnOk) )
+ 		,	MX		( this, IDEC_MX )
+ 		,	MY		( this, IDEC_MY )
+ 		,	MZ		( this, IDEC_MZ )
+diff --git a/UnrealEd/Src/DlgTexProp.cpp b/UnrealEd/Src/DlgTexProp.cpp
+index 32167ec..81e82c5 100644
+--- a/UnrealEd/Src/DlgTexProp.cpp
++++ b/UnrealEd/Src/DlgTexProp.cpp
+@@ -27,16 +27,16 @@ INT GLastViewportNum = -1;
+ 
+ WDlgTexProp::WDlgTexProp( UObject* InContext, WWindow* InOwnerWindow, UMaterial* InTexture )
+ :	WDialog			( TEXT("Material Properties"), IDDIALOG_TEX_PROP, InOwnerWindow )
+-,	ClearButton		( this, IDPB_CLEAR, FDelegate(this,(TDelegate)OnClear) )
+-,	FillButton		( this, IDPB_FILL, FDelegate(this,(TDelegate)OnFill) )
+-,	CubeButton		( this, IDPB_CUBE, FDelegate(this,(TDelegate)OnCube) )
+-,	SphereButton	( this, IDPB_SPHERE, FDelegate(this,(TDelegate)OnSphere) )
++,	ClearButton		( this, IDPB_CLEAR, FDelegate(this,(TDelegate)&WDlgTexProp::OnClear) )
++,	FillButton		( this, IDPB_FILL, FDelegate(this,(TDelegate)&WDlgTexProp::OnFill) )
++,	CubeButton		( this, IDPB_CUBE, FDelegate(this,(TDelegate)&WDlgTexProp::OnCube) )
++,	SphereButton	( this, IDPB_SPHERE, FDelegate(this,(TDelegate)&WDlgTexProp::OnSphere) )
+ ,	ScrollBar		( this, IDSB_TREE )
+-,	ShowFallback	( this, IDCK_FALLBACK, FDelegate(this,(TDelegate)OnShowFallback) )
+-,	ShowBackdrop	( this, IDCK_BACKDROP, FDelegate(this,(TDelegate)OnShowBackdrop) )
+-,	ShowTopLevel	( this, IDCK_TOPLEVEL, FDelegate(this,(TDelegate)OnShowTopLevel) )
++,	ShowFallback	( this, IDCK_FALLBACK, FDelegate(this,(TDelegate)&WDlgTexProp::OnShowFallback) )
++,	ShowBackdrop	( this, IDCK_BACKDROP, FDelegate(this,(TDelegate)&WDlgTexProp::OnShowBackdrop) )
++,	ShowTopLevel	( this, IDCK_TOPLEVEL, FDelegate(this,(TDelegate)&WDlgTexProp::OnShowTopLevel) )
+ ,	ErrorLabel		( this, IDC_MATERIALERROR )
+-,	ErrorButton		( this, IDC_ERRORBUTTON, FDelegate(this,(TDelegate)OnError) )
++,	ErrorButton		( this, IDC_ERRORBUTTON, FDelegate(this,(TDelegate)&WDlgTexProp::OnError) )
+ {
+ 	OldUSize = OldVSize = 0;
+ 	StaticMesh = NULL;
+diff --git a/UnrealEd/Src/EmitterWizard.cpp b/UnrealEd/Src/EmitterWizard.cpp
+index 6195190..65fd0a1 100644
+--- a/UnrealEd/Src/EmitterWizard.cpp
++++ b/UnrealEd/Src/EmitterWizard.cpp
+@@ -14,9 +14,9 @@
+ WEmitterWizard::WEmitterWizard(WWindow* InOwnerWindow, AEmitter* InEditTarget)
+ 	: EditTarget(InEditTarget),
+ 	  WDialog( TEXT("Emitter Wizard"), IDPS_EMITTER_WIZARD, InOwnerWindow ),
+-	  NextButton( this, ID_NEXT, FDelegate(this,(TDelegate)OnNext) ),
+-	  BackButton( this, ID_BACK, FDelegate(this,(TDelegate)OnBack) ),
+-	  CancelButton( this, ID_CANCEL, FDelegate(this,(TDelegate)OnCancel) ),
++	  NextButton( this, ID_NEXT, FDelegate(this,(TDelegate)&WEmitterWizard::OnNext) ),
++	  BackButton( this, ID_BACK, FDelegate(this,(TDelegate)&WEmitterWizard::OnBack) ),
++	  CancelButton( this, ID_CANCEL, FDelegate(this,(TDelegate)&WEmitterWizard::OnCancel) ),
+ 	  CurrentPage(NULL),
+ 	  NewParticleEmitter(NULL)
+ {
+@@ -948,7 +948,7 @@ void WTextureWP::OpenWindow()
+ 
+ 	Finalize();
+ 
+-	UseButton->ClickDelegate = FDelegate(this, (TDelegate)OnUseClick);
++	UseButton->ClickDelegate = FDelegate(this, (TDelegate)&WTextureWP::OnUseClick);
+ 
+ }
+ 
+@@ -1034,7 +1034,7 @@ void WMeshWP::OpenWindow()
+ 
+ 	Finalize();
+ 
+-	UseButton->ClickDelegate = FDelegate(this, (TDelegate)OnUseClick);
++	UseButton->ClickDelegate = FDelegate(this, (TDelegate)&WMeshWP::OnUseClick);
+ 
+ }
+ 
+diff --git a/UnrealEd/Src/ParticleEditor.cpp b/UnrealEd/Src/ParticleEditor.cpp
+index 671de1c..154fc44 100644
+--- a/UnrealEd/Src/ParticleEditor.cpp
++++ b/UnrealEd/Src/ParticleEditor.cpp
+@@ -679,8 +679,8 @@ void WParticleEditor::OnSize( DWORD Flags, INT NewX, INT NewY )
+ // Constructor.
+ WParticleEditorNewEmitterDlg::WParticleEditorNewEmitterDlg( WWindow* InOwnerWindow, AEmitter* InEditTarget)
+ :		WDialog			( TEXT("Add Emitter"), IDPS_ADD_EMITTER, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WParticleEditorNewEmitterDlg::OnOk) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WParticleEditorNewEmitterDlg::EndDialogFalse) )
+ 	,	NameEdit		( this, IDC_Name )
+ 	,	EmitterType		( this, IDPS_PICK_CLASS )
+ 	,	EditTarget(InEditTarget)
+@@ -758,8 +758,8 @@ void WParticleEditorNewEmitterDlg::OnOk()
+ // Constructor.
+ WParticleEditorExportDlg::WParticleEditorExportDlg( WWindow* InOwnerWindow, AEmitter* InEditTarget)
+ :		WDialog			( TEXT("Export Particle System to Script"), IDDIALOG_PE_EXPORT, InOwnerWindow )
+-	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOk) )
+-	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)EndDialogFalse) )
++	,	OkButton		( this, IDOK,			FDelegate(this,(TDelegate)&WParticleEditorExportDlg::OnOk) )
++	,	CancelButton	( this, IDCANCEL,		FDelegate(this,(TDelegate)&WParticleEditorExportDlg::EndDialogFalse) )
+ 	,	ClassEdit		( this, IDEC_CLASSNAME )
+ 	,	PackageEdit		( this, IDEC_PACKAGENAME )
+ 	,	AutoDestroyCheck( this, IDC_AUTODESTROY )
+diff --git a/UnrealEd/Src/ParticleEditorTab.cpp b/UnrealEd/Src/ParticleEditorTab.cpp
+index 183979c..adf1d37 100644
+--- a/UnrealEd/Src/ParticleEditorTab.cpp
++++ b/UnrealEd/Src/ParticleEditorTab.cpp
+@@ -74,7 +74,7 @@ void WParticleEditorTab::OnCreate()
+ 	CategoryList = new WCheckListBox( this, IDLB_PARTICLE_EDITOR_CATS );
+ 	CategoryList->OpenWindow( 1, 0, 1, 1 );
+ 	Anchors.Set((DWORD)CategoryList->hWnd, FWindowAnchor(hWnd, CategoryList->hWnd, ANCHOR_TL, 0, 0, ANCHOR_BOTTOM | ANCHOR_WIDTH, 100, 0 ) );
+-	CategoryList->SelectionChangeDelegate = FDelegate(this, (TDelegate)OnComponentSelChange);
++	CategoryList->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WParticleEditorTab::OnComponentSelChange);
+ 
+ 	CreateComponents();
+ 
+diff --git a/UnrealEd/Src/ParticleEditorToolLabel.cpp b/UnrealEd/Src/ParticleEditorToolLabel.cpp
+index 1cfb600..1766ac0 100644
+--- a/UnrealEd/Src/ParticleEditorToolLabel.cpp
++++ b/UnrealEd/Src/ParticleEditorToolLabel.cpp
+@@ -112,7 +112,7 @@ void WParticleExpandingLabel::OpenWindow(HMODULE InHMOD)
+ 	ExpandButton = new WButton(this, 0);
+ 	ExpandButton->OpenWindow( 1, 0, 0, 15, 15, Expanded ? TEXT("-") : TEXT("+"));
+ 	ExpandButton->SetFont( (HFONT)GetStockObject(ANSI_FIXED_FONT) );
+-	ExpandButton->ClickDelegate = FDelegate(this, (TDelegate)OnExpandClick);
++	ExpandButton->ClickDelegate = FDelegate(this, (TDelegate)&WParticleExpandingLabel::OnExpandClick);
+ 
+ 
+ 	Label = new WLabel(this, 0);
+diff --git a/UnrealEd/Src/ParticleEditorTools.cpp b/UnrealEd/Src/ParticleEditorTools.cpp
+index 3576555..3d3f507 100644
+--- a/UnrealEd/Src/ParticleEditorTools.cpp
++++ b/UnrealEd/Src/ParticleEditorTools.cpp
+@@ -235,9 +235,9 @@ void WRangeEdit::OpenWindow(HMODULE InHMOD )
+ 	Finalize();
+ 
+ 
+-	MinEdit->ChangeDelegate = FDelegate(this, (TDelegate)OnTextChangeMin);
+-	MaxEdit->ChangeDelegate = FDelegate(this, (TDelegate)OnTextChangeMax);
+-	LockButton->ClickDelegate = FDelegate(this, (TDelegate)OnLockClick);
++	MinEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WRangeEdit::OnTextChangeMin);
++	MaxEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WRangeEdit::OnTextChangeMax);
++	LockButton->ClickDelegate = FDelegate(this, (TDelegate)&WRangeEdit::OnLockClick);
+ }
+ 
+ 
+@@ -641,13 +641,13 @@ void WRangeVectorEdit::OpenWindow(HMODULE InHMOD, INT InDlgId)
+ 
+ 	for(i = 0; i < 3; i++)
+ 	{
+-		MinEdit[i]->ChangeDelegate = FDelegate(this, (TDelegate)OnTextChangeMin);
+-		MaxEdit[i]->ChangeDelegate = FDelegate(this, (TDelegate)OnTextChangeMax);
+-		LinkCheck[i]->ClickDelegate = FDelegate(this, (TDelegate)OnLinkClick);
++		MinEdit[i]->ChangeDelegate = FDelegate(this, (TDelegate)&WRangeVectorEdit::OnTextChangeMin);
++		MaxEdit[i]->ChangeDelegate = FDelegate(this, (TDelegate)&WRangeVectorEdit::OnTextChangeMax);
++		LinkCheck[i]->ClickDelegate = FDelegate(this, (TDelegate)&WRangeVectorEdit::OnLinkClick);
+ 	}
+-	LockButton[0]->ClickDelegate = FDelegate(this, (TDelegate)OnLockClickX);
+-	LockButton[1]->ClickDelegate = FDelegate(this, (TDelegate)OnLockClickY);
+-	LockButton[2]->ClickDelegate = FDelegate(this, (TDelegate)OnLockClickZ);
++	LockButton[0]->ClickDelegate = FDelegate(this, (TDelegate)&WRangeVectorEdit::OnLockClickX);
++	LockButton[1]->ClickDelegate = FDelegate(this, (TDelegate)&WRangeVectorEdit::OnLockClickY);
++	LockButton[2]->ClickDelegate = FDelegate(this, (TDelegate)&WRangeVectorEdit::OnLockClickZ);
+ }
+ 
+ 
+@@ -1021,7 +1021,7 @@ void WColorScaleEdit::OpenWindow(HMODULE InHMOD )
+ 
+ 	for(INT i = 0;  i < FieldNames.Num(); i++)
+ 	{
+-		ColorEdits(i)->ChangeDelegate = FDelegate(this, (TDelegate)OnColorTextChange);
++		ColorEdits(i)->ChangeDelegate = FDelegate(this, (TDelegate)&WColorScaleEdit::OnColorTextChange);
+ 	}
+ 
+ 	FieldNames.Empty();
+@@ -1047,7 +1047,7 @@ void WColorScaleEdit::OpenWindow(HMODULE InHMOD )
+ 	EnableWindow( RelTimeEdit->hWnd, FALSE );
+ 	EnableWindow( RelTimeSlide->hWnd, FALSE );
+ 
+-	RelTimeEdit->ChangeDelegate = FDelegate(this, (TDelegate)OnRelTimeTextChange);
++	RelTimeEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WColorScaleEdit::OnRelTimeTextChange);
+ }
+ 
+ 
+@@ -1549,7 +1549,7 @@ void WEnumEdit::OpenWindow(HMODULE InHMOD )
+ 
+ 	PlaceControl( ValEdit );
+ 	Finalize();
+-	ValEdit->SelectionChangeDelegate = FDelegate(this, (TDelegate)UpdateTarget);
++	ValEdit->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WEnumEdit::UpdateTarget);
+ }
+ 
+ 
+@@ -1681,7 +1681,7 @@ void WBoolEdit::OpenWindow(HMODULE InHMOD )
+ 
+ 	ValEdit->SetText(*GetToolName());
+ 
+-	ValEdit->ClickDelegate = FDelegate(this, (TDelegate)UpdateTarget);
++	ValEdit->ClickDelegate = FDelegate(this, (TDelegate)&WBoolEdit::UpdateTarget);
+ }
+ 
+ 
+@@ -1832,7 +1832,7 @@ void WNameEdit::OpenWindow(HMODULE InHMOD )
+ 
+ 	Finalize();
+ 
+-	ValEdit->ChangeDelegate = FDelegate(this, (TDelegate)UpdateTarget);
++	ValEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WNameEdit::UpdateTarget);
+ }
+ 
+ 
+@@ -1914,7 +1914,7 @@ void WStringEdit::OpenWindow(HMODULE InHMOD )
+ 
+ 	Finalize();
+ 
+-	ValEdit->ChangeDelegate = FDelegate(this, (TDelegate)UpdateTarget);
++	ValEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WStringEdit::UpdateTarget);
+ }
+ 
+ 
+@@ -1995,9 +1995,9 @@ void WPercentEdit::OpenWindow(HMODULE InHMOD )
+ 
+ 	PercentTrack->SetRange(0, 100);
+ 
+-	PercentEdit->ChangeDelegate = FDelegate(this, (TDelegate)OnEditChange);
+-	PercentTrack->ThumbTrackDelegate	= FDelegate(this, (TDelegate)OnTrackChange);
+-	PercentTrack->ThumbPositionDelegate	= FDelegate(this, (TDelegate)OnTrackChange);
++	PercentEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WPercentEdit::OnEditChange);
++	PercentTrack->ThumbTrackDelegate	= FDelegate(this, (TDelegate)&WPercentEdit::OnTrackChange);
++	PercentTrack->ThumbPositionDelegate	= FDelegate(this, (TDelegate)&WPercentEdit::OnTrackChange);
+ }
+ 
+ 
+@@ -2130,8 +2130,8 @@ void WTexturePickEdit::OpenWindow(HMODULE InHMOD )
+ 
+ 	Finalize();
+ 
+-	ValEdit->ChangeDelegate = FDelegate(this, (TDelegate)UpdateTarget);
+-	UseButton->ClickDelegate = FDelegate(this, (TDelegate)OnUseClick);
++	ValEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WTexturePickEdit::UpdateTarget);
++	UseButton->ClickDelegate = FDelegate(this, (TDelegate)&WTexturePickEdit::OnUseClick);
+ }
+ 
+ 
+@@ -2224,8 +2224,8 @@ void WSoundPickEdit::OpenWindow(HMODULE InHMOD )
+ 
+ 	Finalize();
+ 
+-	ValEdit->ChangeDelegate = FDelegate(this, (TDelegate)UpdateTarget);
+-	UseButton->ClickDelegate = FDelegate(this, (TDelegate)OnUseClick);
++	ValEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WSoundPickEdit::UpdateTarget);
++	UseButton->ClickDelegate = FDelegate(this, (TDelegate)&WSoundPickEdit::OnUseClick);
+ }
+ 
+ 
+@@ -2309,8 +2309,8 @@ void WMeshPickEdit::OpenWindow(HMODULE InHMOD )
+ 
+ 	Finalize();
+ 
+-	ValEdit->ChangeDelegate = FDelegate(this, (TDelegate)UpdateTarget);
+-	UseButton->ClickDelegate = FDelegate(this, (TDelegate)OnUseClick);
++	ValEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WMeshPickEdit::UpdateTarget);
++	UseButton->ClickDelegate = FDelegate(this, (TDelegate)&WMeshPickEdit::OnUseClick);
+ }
+ 
+ 
+@@ -2418,7 +2418,7 @@ void WColorEdit::OpenWindow( HMODULE InHMOD )
+ 	WVectorEdit<BYTE>::OpenWindow(InHMOD);
+ 
+ 	// create the pick button
+-	PickButton = new WColorButton( this, 0, FDelegate(this, (TDelegate)PickClicked));
++	PickButton = new WColorButton( this, 0, FDelegate(this, (TDelegate)&WColorEdit::PickClicked));
+ 	PickButton->OpenWindow(TRUE, 0);
+ 	PickButton->MoveWindow(365, 1, 20, 20, TRUE);
+ 	PickButton->SetColor(ColorToEdit->R, ColorToEdit->G, ColorToEdit->B);
+@@ -2806,11 +2806,11 @@ void WFadingEdit::OpenWindow(HMODULE InHMOD )
+ 	LockSlidersCheck->SetBitmap( LockSlidersBitmap );
+ 	LockSlidersCheck->SetCheck( LockSliders ? BST_CHECKED : BST_UNCHECKED );
+ 
+-	FadeInBar->ThumbTrackDelegate		= FDelegate(this, (TDelegate)FadeInChange);
+-	FadeInBar->ThumbPositionDelegate	= FDelegate(this, (TDelegate)FadeInChange);
+-	fadeOutBar->ThumbTrackDelegate		= FDelegate(this, (TDelegate)FadeOutChange);
+-	fadeOutBar->ThumbPositionDelegate	= FDelegate(this, (TDelegate)FadeOutChange);
+-	LockSlidersCheck->ClickDelegate = FDelegate(this, (TDelegate)LockSlidersClick);
++	FadeInBar->ThumbTrackDelegate		= FDelegate(this, (TDelegate)&WFadingEdit::FadeInChange);
++	FadeInBar->ThumbPositionDelegate	= FDelegate(this, (TDelegate)&WFadingEdit::FadeInChange);
++	fadeOutBar->ThumbTrackDelegate		= FDelegate(this, (TDelegate)&WFadingEdit::FadeOutChange);
++	fadeOutBar->ThumbPositionDelegate	= FDelegate(this, (TDelegate)&WFadingEdit::FadeOutChange);
++	LockSlidersCheck->ClickDelegate = FDelegate(this, (TDelegate)&WFadingEdit::LockSlidersClick);
+ }
+ 
+ 
+@@ -2943,8 +2943,8 @@ void WScaleEmitterEdit::OpenWindow(HMODULE InHMOD )
+ 	PlaceControl(ScaleSlide);
+ 	Finalize();
+ 
+-	ApplyButton->ClickDelegate = FDelegate(this, (TDelegate)OnApply);	
+-	ScaleEdit->ChangeDelegate = FDelegate(this, (TDelegate)UpdateTarget);
++	ApplyButton->ClickDelegate = FDelegate(this, (TDelegate)&WScaleEmitterEdit::OnApply);	
++	ScaleEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WScaleEmitterEdit::UpdateTarget);
+ 
+ }
+ 
+@@ -3071,8 +3071,8 @@ void WSpeedScaleEdit::OpenWindow(HMODULE InHMOD )
+ 	PlaceControl(ScaleSlide);
+ 	Finalize();
+ 
+-	ApplyButton->ClickDelegate = FDelegate(this, (TDelegate)OnApply);	
+-	ScaleEdit->ChangeDelegate = FDelegate(this, (TDelegate)UpdateTarget);
++	ApplyButton->ClickDelegate = FDelegate(this, (TDelegate)&WSpeedScaleEdit::OnApply);	
++	ScaleEdit->ChangeDelegate = FDelegate(this, (TDelegate)&WSpeedScaleEdit::UpdateTarget);
+ 
+ }
+ 
+diff --git a/UnrealEd/Src/SurfacePropSheet.cpp b/UnrealEd/Src/SurfacePropSheet.cpp
+index 47834a5..4d855ba 100644
+--- a/UnrealEd/Src/SurfacePropSheet.cpp
++++ b/UnrealEd/Src/SurfacePropSheet.cpp
+@@ -110,14 +110,14 @@ void WPageFlags::OpenWindow( INT InDlgId, HMODULE InHMOD )
+ 	Finalize();
+ 
+ 	// Delegates.
+-	InvisibleCheck->ClickDelegate = FDelegate(this, (TDelegate)OnButtonClicked);
+-	FakeBackdropCheck->ClickDelegate = FDelegate(this, (TDelegate)OnButtonClicked);
+-	TwoSidedCheck->ClickDelegate = FDelegate(this, (TDelegate)OnButtonClicked);
+-	SpecialLitCheck->ClickDelegate = FDelegate(this, (TDelegate)OnButtonClicked);
+-	UnlitCheck->ClickDelegate = FDelegate(this, (TDelegate)OnButtonClicked);
+-	PortalCheck->ClickDelegate = FDelegate(this, (TDelegate)OnButtonClicked);
+-	AntiPortalCheck->ClickDelegate = FDelegate(this, (TDelegate) OnButtonClicked);
+-	MirrorCheck->ClickDelegate = FDelegate(this, (TDelegate)OnButtonClicked);
++	InvisibleCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageFlags::OnButtonClicked);
++	FakeBackdropCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageFlags::OnButtonClicked);
++	TwoSidedCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageFlags::OnButtonClicked);
++	SpecialLitCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageFlags::OnButtonClicked);
++	UnlitCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageFlags::OnButtonClicked);
++	PortalCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageFlags::OnButtonClicked);
++	AntiPortalCheck->ClickDelegate = FDelegate(this, (TDelegate) &WPageFlags::OnButtonClicked);
++	MirrorCheck->ClickDelegate = FDelegate(this, (TDelegate)&WPageFlags::OnButtonClicked);
+ 
+ 	unguard;
+ }
+@@ -341,22 +341,22 @@ void WPagePanRotScale::OpenWindow( INT InDlgId, HMODULE InHMOD )
+ 	Finalize();
+ 
+ 	// Delegates.
+-	PanU1Button->ClickDelegate = FDelegate(this, (TDelegate)OnPanU1Clicked);
+-	PanU4Button->ClickDelegate = FDelegate(this, (TDelegate)OnPanU4Clicked);
+-	PanU16Button->ClickDelegate = FDelegate(this, (TDelegate)OnPanU16Clicked);
+-	PanU64Button->ClickDelegate = FDelegate(this, (TDelegate)OnPanU64Clicked);
+-	PanV1Button->ClickDelegate = FDelegate(this, (TDelegate)OnPanV1Clicked);
+-	PanV4Button->ClickDelegate = FDelegate(this, (TDelegate)OnPanV4Clicked);
+-	PanV16Button->ClickDelegate = FDelegate(this, (TDelegate)OnPanV16Clicked);
+-	PanV64Button->ClickDelegate = FDelegate(this, (TDelegate)OnPanV64Clicked);
+-	ApplyButton->ClickDelegate = FDelegate(this, (TDelegate)OnApplyClicked);
+-	Apply2Button->ClickDelegate = FDelegate(this, (TDelegate)OnApply2Clicked);
+-	FlipUButton->ClickDelegate = FDelegate(this, (TDelegate)OnFlipUClicked);
+-	FlipVButton->ClickDelegate = FDelegate(this, (TDelegate)OnFlipVClicked);
+-	Rot45Button->ClickDelegate = FDelegate(this, (TDelegate)OnRot45Clicked);
+-	Rot90Button->ClickDelegate = FDelegate(this, (TDelegate)OnRot90Clicked);
+-
+-	LightMapScaleCombo->SelectionEndOkDelegate = FDelegate(this, (TDelegate)OnLightMapScaleChanged);
++	PanU1Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnPanU1Clicked);
++	PanU4Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnPanU4Clicked);
++	PanU16Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnPanU16Clicked);
++	PanU64Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnPanU64Clicked);
++	PanV1Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnPanV1Clicked);
++	PanV4Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnPanV4Clicked);
++	PanV16Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnPanV16Clicked);
++	PanV64Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnPanV64Clicked);
++	ApplyButton->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnApplyClicked);
++	Apply2Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnApply2Clicked);
++	FlipUButton->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnFlipUClicked);
++	FlipVButton->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnFlipVClicked);
++	Rot45Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnRot45Clicked);
++	Rot90Button->ClickDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnRot90Clicked);
++
++	LightMapScaleCombo->SelectionEndOkDelegate = FDelegate(this, (TDelegate)&WPagePanRotScale::OnLightMapScaleChanged);
+ 
+ 	// Initialize controls.
+ 	SimpleScaleCombo->AddString( TEXT("0.0625" ) );
+@@ -587,9 +587,9 @@ void WPageAlignment::OpenWindow( INT InDlgId, HMODULE InHMOD )
+ 	Finalize();
+ 
+ 	// Delegates.
+-	AlignButton->ClickDelegate = FDelegate(this, (TDelegate)OnAlignClick);
+-	AlignList->DoubleClickDelegate = FDelegate(this, (TDelegate)OnAlignClick);
+-	AlignList->SelectionChangeDelegate = FDelegate(this, (TDelegate)AlignListSelectionChange);
++	AlignButton->ClickDelegate = FDelegate(this, (TDelegate)&WPageAlignment::OnAlignClick);
++	AlignList->DoubleClickDelegate = FDelegate(this, (TDelegate)&WPageAlignment::OnAlignClick);
++	AlignList->SelectionChangeDelegate = FDelegate(this, (TDelegate)&WPageAlignment::AlignListSelectionChange);
+ 
+ 	// Initialize controls.
+ 	for( INT x = 0 ; x < GTexAlignTools.Aligners.Num() ; ++x )
+-- 
+2.31.1.windows.1
+
