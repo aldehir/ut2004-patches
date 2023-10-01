@@ -73,6 +73,22 @@ future patches are added, you will need to selectively add them. You cannot
 reapply the same patch, git will yell at you.
 
 
+## Game Assets
+
+The UT2004 source code does not contain the game assets, and some are needed to
+compile the UnrealScript source. Copy the following directories from your
+UT2004 installation:
+
+* Animations
+* Music
+* KarmaData
+* Maps
+* Sounds
+* Textures
+* StaticMeshes
+* Help
+
+
 ## Build the source code
 
 To build UT2004 in release mode:
@@ -87,19 +103,4 @@ For debug mode:
 just debug=1
 ```
 
-
-## Playing
-
-The UT2004 source code does not contain the game assets needed to play. You
-will need to copy the following directories from your UT2004 installation:
-
-* Animations
-* Music
-* KarmaData
-* Maps
-* Sounds
-* Textures
-* StaticMeshes
-* Help
-
-Once done, you can execute `UT2004.exe` or run `just play`.
+Once built, you can launch `System\UT2004.exe` or run `just play`.
