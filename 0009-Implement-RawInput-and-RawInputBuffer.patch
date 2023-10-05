@@ -1,0 +1,1810 @@
+From bd116ae6a279083dfe17e036a9231e34c140a644 Mon Sep 17 00:00:00 2001
+From: Alde Rojas <hello@alde.dev>
+Date: Wed, 4 Oct 2023 22:33:00 -0500
+Subject: [PATCH] Implement RawInput and RawInputBuffer
+
+Add the `MouseInputClass` configuration option under `WinDrv.WindowsClient`.
+This option may have one of three values:
+
+* WinDrv.WindowsDirectInput (DirectInput)
+* WinDrv.WindowsRawInput (Unbuffered RawInput)
+* WinDrv.WindowsRawInputBuffer (Buffered RawInput)
+
+Additionally, add the command `setmouseinput` to set from console.
+Options from the console are:
+
+* `setmouseinput directinput`
+* `setmouseinput rawinput`
+* `setmouseinput rawinputbuffer`
+---
+ Core/meson.build                 |   4 +-
+ Engine/Inc/UnCamera.h            |   1 +
+ Engine/Inc/UnEngineWin.h         |  16 +-
+ Engine/Src/UnCamMgr.cpp          |   7 +
+ Engine/meson.build               |   4 +-
+ Launch/meson.build               |   1 +
+ WinDrv/Inc/WinDrv.h              | 175 ++++++++++++-
+ WinDrv/Src/WinClient.cpp         |  70 ++++--
+ WinDrv/Src/WinDirectInput.cpp    | 408 +++++++++++++++++++++++++++++++
+ WinDrv/Src/WinDrv.vcproj         |  14 +-
+ WinDrv/Src/WinInput.cpp          |  28 +++
+ WinDrv/Src/WinRawInput.cpp       | 150 ++++++++++++
+ WinDrv/Src/WinRawInputBuffer.cpp |  77 ++++++
+ WinDrv/Src/WinViewport.cpp       | 370 +++-------------------------
+ WinDrv/meson.build               |   8 +-
+ Window/meson.build               |   3 +-
+ justfile                         |   4 +-
+ 18 files changed, 970 insertions(+), 370 deletions(-)
+ create mode 100644 WinDrv/Src/WinDirectInput.cpp
+ create mode 100644 WinDrv/Src/WinInput.cpp
+ create mode 100644 WinDrv/Src/WinRawInput.cpp
+ create mode 100644 WinDrv/Src/WinRawInputBuffer.cpp
+
+diff --git a/Core/meson.build b/Core/meson.build
+index 53a22ce..ad2faf9 100644
+--- a/Core/meson.build
++++ b/Core/meson.build
+@@ -22,8 +22,8 @@ core_lib = library('Core',
+   cpp_args: [
+     '/MD',
+     '/DCORE_API=__declspec(dllexport)',
+-    '/D_DEBUG_WIN32_IE=0x0200',
+-    '/D_WIN32_WINNT=0x0400',
++    '/D_WIN32_IE=0x0501',
++    '/D_WIN32_WINNT=0x0501',
+     '/DWITH_LIPSINC',
+   ],
+   link_args: [
+diff --git a/Engine/Inc/UnCamera.h b/Engine/Inc/UnCamera.h
+index a8752ee..d6b43e5 100644
+--- a/Engine/Inc/UnCamera.h
++++ b/Engine/Inc/UnCamera.h
+@@ -530,6 +530,7 @@ class ENGINE_API UClient : public UObject
+ 	virtual void MakeCurrent( UViewport* NewViewport )=0;
+ 	virtual UViewport* GetLastCurrent()=0;
+ 	virtual void TeardownSR()=0;
++	virtual UBOOL SuppressRawMessages();
+ 
+     // gam ---
+     INT GetTextureLODBias (ELODSet LODSet);
+diff --git a/Engine/Inc/UnEngineWin.h b/Engine/Inc/UnEngineWin.h
+index 286bc11..50e4310 100644
+--- a/Engine/Inc/UnEngineWin.h
++++ b/Engine/Inc/UnEngineWin.h
+@@ -962,8 +962,22 @@ inline void	CMainLoop::RunLoop(void)
+ 		// Handle all incoming messages.
+ 		guard(MessagePump);
+ 		MSG Msg;
+-		while( PeekMessageX(&Msg,NULL,0,0,PM_REMOVE) )
++
++		for (;;)
+ 		{
++			if ( Engine->Client->SuppressRawMessages() )
++			{
++				if (!PeekMessageX(&Msg, NULL, 0, WM_INPUT-1, PM_REMOVE)
++					&& !PeekMessageX(&Msg, NULL, WM_INPUT+1, (UINT)-1, PM_REMOVE))
++				{
++					break;
++				}
++			}
++			else if (!PeekMessageX(&Msg,NULL,0,0,PM_REMOVE))
++			{
++				break;
++			}
++
+ 			if( Msg.message == WM_QUIT )
+ 			{
+ 				// When closing down the editor, check to see if there are any unsaved dirty packages.
+diff --git a/Engine/Src/UnCamMgr.cpp b/Engine/Src/UnCamMgr.cpp
+index 485ff1e..362b578 100644
+--- a/Engine/Src/UnCamMgr.cpp
++++ b/Engine/Src/UnCamMgr.cpp
+@@ -239,6 +239,13 @@ INT UClient::GetTextureLODBias (ELODSet LODSet)
+ 	unguard;
+ }
+ 
++UBOOL UClient::SuppressRawMessages()
++{
++	guard(UClient::SuppressRawMessages);
++	return false;
++	unguard;
++}
++
+ IMPLEMENT_CLASS(UClient);
+ 
+ /*-----------------------------------------------------------------------------
+diff --git a/Engine/meson.build b/Engine/meson.build
+index d3dc610..a741f8f 100644
+--- a/Engine/meson.build
++++ b/Engine/meson.build
+@@ -125,8 +125,8 @@ engine_lib = library('Engine',
+   cpp_args: [
+     '/MD',
+     '/DENGINE_API=__declspec(dllexport)',
+-    '/D_DEBUG_WIN32_IE=0x0200',
+-    '/D_WIN32_WINNT=0x0400',
++    '/D_WIN32_IE=0x0501',
++    '/D_WIN32_WINNT=0x0501',
+     '/DWITH_LIPSINC',
+   ],
+   link_args: [
+diff --git a/Launch/meson.build b/Launch/meson.build
+index 6d628c1..32b48b4 100644
+--- a/Launch/meson.build
++++ b/Launch/meson.build
+@@ -15,6 +15,7 @@ executable('UT2004',
+   launch_res,
+   cpp_args: [
+     '/MD',
++    '/D_WIN32_WINNT=0x0501',
+     '/DWITH_LIPSINC',
+   ],
+   link_args: [
+diff --git a/WinDrv/Inc/WinDrv.h b/WinDrv/Inc/WinDrv.h
+index d899118..777a9cc 100644
+--- a/WinDrv/Inc/WinDrv.h
++++ b/WinDrv/Inc/WinDrv.h
+@@ -68,6 +68,7 @@ Revision history:
+ // Classes.
+ class UWindowsViewport;
+ class UWindowsClient;
++class UWindowsInput;
+ 
+ // Global functions.
+ WINDRV_API void DirectInputError( const FString Error, HRESULT hr, UBOOL Fatal );
+@@ -83,6 +84,8 @@ class DLL_EXPORT UWindowsClient : public UClient, public FNotifyHook
+ {
+ 	DECLARE_CLASS(UWindowsClient,UClient,CLASS_Transient|CLASS_Config,WinDrv)
+ 
++	UWindowsInput*		Input;
++
+ 	// Configuration.
+ 	BITFIELD			UseJoystick,
+ 						StartupFullscreen,
+@@ -124,6 +127,8 @@ class DLL_EXPORT UWindowsClient : public UClient, public FNotifyHook
+ 	UViewport* GetLastCurrent();
+ 	class UViewport* NewViewport( const FName Name );
+ 	void TeardownSR();
++
++	UBOOL SuppressRawMessages();
+ };
+ 
+ /*-----------------------------------------------------------------------------
+@@ -140,6 +145,7 @@ enum EWinViewportStatus
+ 	WIN_ViewportClosing	= 2, // Viewport is closing and CloseViewport has been called.
+ };
+ 
++
+ //
+ // A Windows viewport.
+ //
+@@ -163,16 +169,11 @@ class DLL_EXPORT UWindowsViewport : public UViewport
+ 	INT					CurrentIMESize;
+ 	FString				CurrentGrammar;
+ 
++
+ #if WITH_DIVX
+ 	FDivXEncoder*		DivXEncoder;
+ #endif
+ 
+-	// DirectInput variables.
+-	static LPDIRECTINPUT8			DirectInput8;
+-	static LPDIRECTINPUTDEVICE8		Mouse;
+-	static LPDIRECTINPUTDEVICE8		Joystick;
+-	static DIDEVCAPS				JoystickCaps;
+-
+ 	static UBOOL					CoInitialized;
+ 	
+ 	// Speech recognition.
+@@ -189,8 +190,14 @@ class DLL_EXPORT UWindowsViewport : public UViewport
+ 	INT					SavedCaps;
+ 	HCURSOR				StandardCursors[10];
+ 
++	// Processed input between calls.
++	BYTE				ProcessedInput[256];
++
++	class UWindowsInputHandler* InputHandler;
++
+ 	// Constructor.
+-	UWindowsViewport();
++	NO_DEFAULT_CONSTRUCTOR(UWindowsViewport)
++	UWindowsViewport(class UWindowsInputHandler* InputHandler);
+ 
+ 	// UObject interface.
+ 	void Destroy();
+@@ -259,9 +266,161 @@ class DLL_EXPORT WWindowsViewportWindow : public WWindow
+ 	}
+ };
+ 
++//
++// Windows input parent class.
++//
++class DLL_EXPORT UWindowsInput : public UObject
++{
++	DECLARE_CLASS(UWindowsInput,UObject,CLASS_Transient,WinDrv)
++	DECLARE_WITHIN(UWindowsClient)
++
++	virtual void Init() {}
++	virtual UWindowsInputHandler* NewHandler(const FName Name) { return NULL; }
++
++	virtual UBOOL SuppressRawMessages() { return false; }
++};
++
++class DLL_EXPORT UWindowsInputHandler : public UObject
++{
++	DECLARE_CLASS(UWindowsInputHandler,UObject,CLASS_Transient,WinDrv)
++	DECLARE_WITHIN(UWindowsInput)
++
++	UWindowsViewport*	Viewport;
++
++	virtual void Init() {}
++	virtual void UpdateInput(FLOAT DeltaSeconds) {}
++	virtual void SetCooperative() {}
++	virtual void Acquire() {}
++	virtual void Unacquire() {}
++
++	virtual UBOOL HandleWindowMessage(UINT iMessage, WPARAM wParam, LPARAM lParam) { return false; }
++
++	// Helper functions
++	UInput* ViewportInput() { return Viewport->Input; }
++	WWindowsViewportWindow* ViewportWindow() { return Viewport->Window; }
++
++	void MarkProcessed(INT iKey) { Viewport->ProcessedInput[iKey] = 1; }
++	UBOOL CauseInputEvent( INT iKey, EInputAction Action, FLOAT Delta=0.0 )
++	{
++		return Viewport->CauseInputEvent(iKey, Action, Delta);
++	}
++};
++
++//
++// Direct input.
++//
++class DLL_EXPORT UWindowsDirectInput : public UWindowsInput
++{
++	DECLARE_CLASS(UWindowsDirectInput,UWindowsInput,CLASS_Transient,WinDrv)
++	DECLARE_WITHIN(UWindowsClient)
++
++	LPDIRECTINPUT8			DirectInput8;
++	LPDIRECTINPUTDEVICE8	Mouse;
++	LPDIRECTINPUTDEVICE8	Joystick;
++	DIDEVCAPS				JoystickCaps;
++
++	void Destroy();
++
++	void Init();
++	UWindowsInputHandler* NewHandler(const FName Name);
++
++	BOOL EnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance);
++	BOOL EnumAxesCallback(const DIDEVICEOBJECTINSTANCE* pdidoi);
++
++	void InitializeDevices();
++	void AcquireDevices();
++	void UnacquireDevices();
++	void ReleaseDevices();
++};
++
++class DLL_EXPORT UWindowsDirectInputHandler : public UWindowsInputHandler
++{
++	DECLARE_CLASS(UWindowsDirectInputHandler,UWindowsInputHandler,CLASS_Transient,WinDrv)
++	DECLARE_WITHIN(UWindowsDirectInput);
++
++	EInputKey	LastJoyPOV;
++
++	void Destroy();
++
++	void Init() { GetOuterUWindowsDirectInput()->InitializeDevices(); }
++	void UpdateInput(FLOAT DeltaSeconds);
++	void SetCooperative();
++
++	void Acquire() { GetOuterUWindowsDirectInput()->AcquireDevices(); }
++	void Unacquire() { GetOuterUWindowsDirectInput()->UnacquireDevices(); }
++};
++
++//
++// Raw input.
++//
++class DLL_EXPORT UWindowsRawInput : public UWindowsInput
++{
++	DECLARE_CLASS(UWindowsRawInput,UWindowsInput,CLASS_Transient,WinDrv)
++	DECLARE_WITHIN(UWindowsClient)
++
++	UWindowsInputHandler* NewHandler(const FName Name);
++};
++
++class DLL_EXPORT UWindowsRawInputHandler : public UWindowsInputHandler
++{
++	DECLARE_CLASS(UWindowsRawInputHandler,UWindowsInputHandler,CLASS_Transient,WinDrv)
++	DECLARE_WITHIN(UWindowsRawInput);
++
++	void UpdateInput(FLOAT DeltaSeconds);
++	UBOOL HandleWindowMessage(UINT iMessage, WPARAM wParam, LPARAM lParam);
++
++	void Acquire() { RegisterDevice(false); }
++	void Unacquire() { RegisterDevice(true); }
++
++	void RegisterDevice(UBOOL WithLegacy);
++	void ProcessRawInput(RAWINPUT* RawInput);
++};
++
++//
++// Raw input buffer.
++//
++class DLL_EXPORT UWindowsRawInputBuffer : public UWindowsRawInput
++{
++	DECLARE_CLASS(UWindowsRawInputBuffer,UWindowsRawInput,CLASS_Transient,WinDrv)
++	DECLARE_WITHIN(UWindowsClient)
++
++	UWindowsInputHandler* NewHandler(const FName Name);
++	UBOOL SuppressRawMessages();
++};
++
++class DLL_EXPORT UWindowsRawInputBufferHandler : public UWindowsRawInputHandler
++{
++	DECLARE_CLASS(UWindowsRawInputBufferHandler,UWindowsRawInputHandler,CLASS_Transient,WinDrv)
++	DECLARE_WITHIN(UWindowsRawInputBuffer);
++
++	void UpdateInput(FLOAT DeltaSeconds);
++};
++
++class DLL_EXPORT FWindowsInputStats
++{
++public:
++	INT	STATS_FirstEntry,
++		STATS_MouseInputCalls,
++		STATS_MouseInputCycles,
++		STATS_LastEntry;
++
++	FWindowsInputStats();
++	void Init();
++};
++
+ #define AUTO_INITIALIZE_REGISTRANTS_WINDRV \
+ 	UWindowsViewport::StaticClass(); \
+-	UWindowsClient::StaticClass();
++	UWindowsClient::StaticClass(); \
++	UWindowsInput::StaticClass(); \
++	UWindowsInputHandler::StaticClass(); \
++	UWindowsDirectInput::StaticClass(); \
++	UWindowsDirectInputHandler::StaticClass(); \
++	UWindowsRawInput::StaticClass(); \
++	UWindowsRawInputHandler::StaticClass(); \
++	UWindowsRawInputBuffer::StaticClass(); \
++	UWindowsRawInputBufferHandler::StaticClass();
++
++extern "C" FWindowsInputStats GWindowsInputStats;
+ 
+ #endif //_INC_WINDRV
+ /*-----------------------------------------------------------------------------
+diff --git a/WinDrv/Src/WinClient.cpp b/WinDrv/Src/WinClient.cpp
+index 584705b..b0f6f1a 100644
+--- a/WinDrv/Src/WinClient.cpp
++++ b/WinDrv/Src/WinClient.cpp
+@@ -30,6 +30,7 @@ UWindowsClient::UWindowsClient()
+ 	hkAltTab	= GlobalAddAtom( TEXT("UnrealAltTab")  );
+ 	hkCtrlEsc	= GlobalAddAtom( TEXT("UnrealCtrlEsc") );
+ 	hkCtrlTab	= GlobalAddAtom( TEXT("UnrealCtrlTab") );
++	Input		= NULL;
+ 
+ 	unguard;
+ }
+@@ -65,13 +66,17 @@ void UWindowsClient::Init( UEngine* InEngine )
+ 	// Register window class.
+ 	IMPLEMENT_WINDOWCLASS(WWindowsViewportWindow,GIsEditor ? (CS_DBLCLKS|CS_OWNDC) : (CS_OWNDC));
+ 
+-	// Initialize DirectInput.
+-	if (hInstanceWindow)
+-	{
+-		HRESULT hr;
+-		if( FAILED( hr = DirectInput8Create( hInstanceWindow, DIRECTINPUT_VERSION, IID_IDirectInput8, (VOID**)&UWindowsViewport::DirectInput8, NULL ) ) )
+-			DirectInputError( TEXT("Couldn't create input device"), hr, true );
+-	}
++	// Load mouse input class
++	UClass* InputClass = LoadClass<UWindowsInput>(NULL, TEXT("ini:WinDrv.WindowsClient.MouseInputClass"), NULL, LOAD_NoWarn, NULL);
++	if (!InputClass)
++		InputClass = UWindowsDirectInput::StaticClass();
++
++	Input = ConstructObject<UWindowsInput>(InputClass, this, NAME_None, RF_Keep);
++	Input->Init();
++
++	GWindowsInputStats.Init();
++
++	debugf(TEXT("Initialized input"));
+ 
+ 	// Note configuration.
+ 	PostEditChange();
+@@ -130,6 +135,17 @@ void UWindowsClient::Init( UEngine* InEngine )
+ 	unguard;
+ }
+ 
++UBOOL UWindowsClient::SuppressRawMessages()
++{
++	// Handle all incoming messages.
++	guard(UWindowsClient::SuppressRawMessages);
++	if (Input)
++		return Input->SuppressRawMessages();
++
++	return false;
++	unguard;
++}
++
+ void UWindowsClient::TeardownSR()
+ {
+ 	guard(UWindowsClient::Destroy);
+@@ -159,6 +175,8 @@ void UWindowsClient::Destroy()
+ 	for( INT i=0; i<Viewports.Num(); i++ )
+ 		Viewports(i)->ConditionalDestroy();
+ 
++	Input->ConditionalDestroy();
++
+ 	// Shut down GRenDev.
+ 	Engine->GRenDev->Exit(NULL);
+ 
+@@ -183,12 +201,6 @@ void UWindowsClient::Destroy()
+ 		CoUninitialize();
+ #endif
+ 
+-	if (UWindowsViewport::DirectInput8)
+-	{
+-		UWindowsViewport::DirectInput8->Release();
+-		UWindowsViewport::DirectInput8 = NULL;
+-	}
+-	
+ 	GlobalDeleteAtom( hkAltEsc );
+ 	GlobalDeleteAtom( hkAltTab );
+ 	GlobalDeleteAtom( hkCtrlEsc );
+@@ -248,6 +260,36 @@ UBOOL UWindowsClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
+ 	{
+ 		return 1;
+ 	}
++	else if( ParseCommand(&Cmd,TEXT("SETMOUSEINPUT")) )
++	{
++		FString value;
++
++		if ( ParseCommand(&Cmd, TEXT("DIRECTINPUT")) || ParseCommand(&Cmd, TEXT("DIRECT")) )
++		{
++			value = "WinDrv.WindowsDirectInput";
++		}
++		else if ( ParseCommand(&Cmd, TEXT("RAWINPUT")) || ParseCommand(&Cmd, TEXT("RAW")) )
++		{
++			value = "WinDrv.WindowsRawInput";
++		}
++		else if ( ParseCommand(&Cmd, TEXT("RAWINPUTBUFFER")) || ParseCommand(&Cmd, TEXT("RAWBUFFER")) )
++		{
++			value = "WinDrv.WindowsRawInputBuffer";
++		}
++		else
++		{
++			Ar.Log(TEXT("Invalid option. Valid choices are:"));
++			Ar.Log(TEXT(" - directinput"));
++			Ar.Log(TEXT(" - rawinput"));
++			Ar.Log(TEXT(" - rawinputbuffer"));
++			return 1;
++		}
++
++		GConfig->SetString(TEXT("WinDrv.WindowsClient"), TEXT("MouseInputClass"), *value);
++		GConfig->Flush(true);
++		Ar.Log(TEXT("Mouse input set. Restart client to apply."));
++		return 1;
++	}
+ 	return 0;
+ 	unguard;
+ }
+@@ -319,7 +361,7 @@ void UWindowsClient::Tick()
+ UViewport* UWindowsClient::NewViewport( const FName Name )
+ {
+ 	guard(UWindowsClient::NewViewport);
+-	return new( this, Name )UWindowsViewport();
++	return new( this, Name )UWindowsViewport(Input->NewHandler(Name));
+ 	unguard;
+ }
+ 
+diff --git a/WinDrv/Src/WinDirectInput.cpp b/WinDrv/Src/WinDirectInput.cpp
+new file mode 100644
+index 0000000..3a4b18e
+--- /dev/null
++++ b/WinDrv/Src/WinDirectInput.cpp
+@@ -0,0 +1,408 @@
++#include "WinDrv.h"
++
++IMPLEMENT_CLASS(UWindowsDirectInput);
++IMPLEMENT_CLASS(UWindowsDirectInputHandler);
++
++static BOOL CALLBACK EnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance, VOID* pContext)
++{
++	return ((UWindowsDirectInput*)pContext)->EnumJoysticksCallback(pdidInstance);
++}
++
++static BOOL CALLBACK EnumAxesCallback(const DIDEVICEOBJECTINSTANCE* pdidoi, VOID* pContext)
++{
++	return ((UWindowsDirectInput*)pContext)->EnumAxesCallback(pdidoi);
++}
++
++void UWindowsDirectInput::Destroy()
++{
++	guard(UWindowsDirectInput::Destroy)
++	if (DirectInput8) {
++		DirectInput8->Release();
++		DirectInput8 = NULL;
++	}
++
++	Super::Destroy();
++	unguard;
++}
++
++void UWindowsDirectInput::Init()
++{
++	guard(UWindowsDirectInput::Init);
++	HRESULT hr;
++	if( FAILED( hr = DirectInput8Create( hInstanceWindow, DIRECTINPUT_VERSION, IID_IDirectInput8, (VOID**)&DirectInput8, NULL ) ) )
++		DirectInputError( TEXT("Couldn't create input device"), hr, true );
++	unguard;
++}
++
++void UWindowsDirectInput::InitializeDevices()
++{
++	guard(UWindowsDirectInput::InitializeDevices);
++	// Get mouse. (shared between viewports)
++	if ( Mouse == NULL )
++	{
++		HRESULT hr;
++		if( FAILED( hr = DirectInput8->CreateDevice( GUID_SysMouse, &Mouse, NULL ) ) )
++			DirectInputError( TEXT("Couldn't create mouse device"), hr, true );
++
++		// Set data format.
++		if( FAILED( hr = Mouse->SetDataFormat( &c_dfDIMouse2 ) ) )
++			DirectInputError( TEXT("Couldn't set mouse data format"), hr, true );
++
++		// Set mouse buffer.
++		DIPROPDWORD Property;
++
++		Property.diph.dwSize       = sizeof(DIPROPDWORD);
++		Property.diph.dwHeaderSize = sizeof(DIPROPHEADER);
++		Property.diph.dwObj        = 0;
++		Property.diph.dwHow        = DIPH_DEVICE;
++		Property.dwData            = 1024;	// buffer size
++
++		if( FAILED( hr = Mouse->SetProperty(DIPROP_BUFFERSIZE, &Property.diph) ) )
++			DirectInputError( TEXT("Couldn't set mouse buffer size"), hr, true );
++
++		// Set mouse axis mode.
++		Property.dwData				= DIPROPAXISMODE_REL;
++
++		if( FAILED( hr = Mouse->SetProperty(DIPROP_AXISMODE, &Property.diph) ) )
++			DirectInputError( TEXT("Couldn't set relative axis mode for mouse"), hr, true );
++	}
++
++	// Joystick. (shared between viewports)
++	if ( Joystick == NULL )
++	{
++		HRESULT hr;
++		if( FAILED( hr = DirectInput8->EnumDevices(
++			DI8DEVCLASS_GAMECTRL,
++			&::EnumJoysticksCallback,
++			(void*)this,
++			DIEDFL_ATTACHEDONLY
++			)))
++			DirectInputError( TEXT("Couldn't enumerate devices"), hr, true );
++
++		// Make sure we got a joystick
++		if( Joystick != NULL)
++		{
++			// Set joystick data format.
++			if( FAILED( hr = Joystick->SetDataFormat( &c_dfDIJoystick2 ) ) )
++				DirectInputError( TEXT("Couldn't set joystick data format"), hr, true );
++
++			// Get caps.
++			JoystickCaps.dwSize = sizeof(DIDEVCAPS);
++			if ( FAILED( hr = Joystick->GetCapabilities(&JoystickCaps) ) )
++				DirectInputError( TEXT("Couldn't get joystick caps"), hr, true );
++
++			// Set axis range.
++			if ( FAILED( hr = Joystick->EnumObjects( &::EnumAxesCallback, (void*)this, DIDFT_AXIS ) ) )
++				DirectInputError( TEXT("Couldn't enumerate joystick axis"), hr, true );
++		}
++	}
++	unguard;
++}
++
++BOOL UWindowsDirectInput::EnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance)
++{
++	guard(UWindowsDirectInput::EnumJoysticksCallback);
++    HRESULT hr;
++	
++	if( FAILED( hr = DirectInput8->CreateDevice( pdidInstance->guidInstance, &Joystick, NULL ) ) ) 
++	{
++		Joystick = NULL;
++        return DIENUM_CONTINUE;
++	}
++
++    return DIENUM_STOP;
++	unguard;
++}
++
++BOOL UWindowsDirectInput::EnumAxesCallback(const DIDEVICEOBJECTINSTANCE* pdidoi)
++{
++	guard(UWindowsDirectInput::EnumAxesCallback);
++    DIPROPRANGE diprg; 
++    diprg.diph.dwSize       = sizeof(DIPROPRANGE); 
++    diprg.diph.dwHeaderSize = sizeof(DIPROPHEADER); 
++    diprg.diph.dwHow        = DIPH_BYOFFSET; 
++    diprg.diph.dwObj        = pdidoi->dwOfs; // Specify the enumerated axis
++    diprg.lMin              = 0;//-32768; 
++    diprg.lMax              = 65535;//+32767; 
++    
++	// Set the range for the axis
++	Joystick->SetProperty( DIPROP_RANGE, &diprg.diph );
++//	if( FAILED( Joystick->SetProperty( DIPROP_RANGE, &diprg.diph ) ) )
++//		return DIENUM_STOP;
++
++    return DIENUM_CONTINUE;
++	unguard;
++}
++
++void UWindowsDirectInput::AcquireDevices()
++{
++	guard(UWindowsDirectInput::Acquire)
++	if (Mouse) Mouse->Acquire();
++	if (Joystick) Joystick->Acquire();
++	unguard;
++}
++
++void UWindowsDirectInput::UnacquireDevices()
++{
++	guard(UWindowsDirectInput::Unacquire)
++	if (Mouse) Mouse->Unacquire();
++	if (Joystick) Joystick->Unacquire();
++	unguard;
++}
++
++void UWindowsDirectInput::ReleaseDevices()
++{
++	guard(UWindowsDirectInputHandler::Release)
++
++	if (Mouse)
++	{
++		Mouse->Release();
++		Mouse = NULL;
++	}
++
++	if (Joystick)
++	{
++		Joystick->Release();
++		Joystick = NULL;
++	}
++
++	unguard;
++}
++
++UWindowsInputHandler* UWindowsDirectInput::NewHandler(const FName Name)
++{
++	guard(UWindowsDirectInput::NewHandler);
++	return new(this, Name, RF_Keep) UWindowsDirectInputHandler();
++	unguard;
++}
++
++void UWindowsDirectInputHandler::Destroy()
++{
++	guard(UWindowsDirectInputHandler::Destroy)
++	GetOuterUWindowsDirectInput()->ReleaseDevices();
++	Super::Destroy();
++	unguard;
++}
++
++void UWindowsDirectInputHandler::UpdateInput(FLOAT DeltaSeconds)
++{
++	guard(UWindowsInputHandler::UpdateInput);
++	clock(GStats.DWORDStats(GWindowsInputStats.STATS_MouseInputCycles));
++	UWindowsDirectInput *WinInput = GetOuterUWindowsDirectInput();
++	UWindowsClient *Client = GetOuterUWindowsInput()->GetOuterUWindowsClient();
++
++	FLOAT MouseXMultiplier = Client->MouseXMultiplier;
++	FLOAT MouseYMultiplier = Client->MouseYMultiplier;
++
++	// Backward compatibility with old inis.
++	if( MouseXMultiplier == 0.f )
++		MouseXMultiplier = 1.f;
++	if( MouseYMultiplier == 0.f )
++		MouseYMultiplier = 1.f;
++
++	HRESULT hr;
++
++	// DirectInput Joystick.
++	if( WinInput->Joystick && Client->UseJoystick )
++	{
++		DIJOYSTATE2 State;
++ 
++		// Poll the device and read the current state.
++		if( FAILED( hr = WinInput->Joystick->Poll() ) || FAILED( hr = WinInput->Joystick->GetDeviceState( sizeof(DIJOYSTATE2), &State ) ))  
++		{
++			WinInput->Joystick->Acquire();
++		}
++		else
++		{
++			// Pass buttons to the input system.
++			for( INT i=0; i<12; i++ )
++			{
++				INT Button = IK_Joy1 + i;
++				if( !ViewportInput()->KeyDown( Button ) && (State.rgbButtons[i] & 0x80) )
++					CauseInputEvent( Button, IST_Press );
++				else if( ViewportInput()->KeyDown( Button ) && !(State.rgbButtons[i] & 0x80) )
++					CauseInputEvent( Button, IST_Release );
++				MarkProcessed(IK_Joy1+i);
++			}
++		
++			// Joystick POV support.
++			DWORD		POV			= State.rgdwPOV[0];
++			UBOOL		POVCentered = (LOWORD(POV) == 0xFFFF);
++			EInputKey	ThisJoyPOV	= IK_None;
++
++			if( POVCentered )
++				ThisJoyPOV = IK_None;
++			else if( POV <  4500 )
++				ThisJoyPOV = IK_Joy13;
++			else if( POV < 13500 )
++				ThisJoyPOV = IK_Joy14;
++			else if( POV < 22500 )
++				ThisJoyPOV = IK_Joy15;
++			else if( POV < 31500 )
++				ThisJoyPOV = IK_Joy16;
++			else
++				ThisJoyPOV = IK_Joy13;
++
++			if( LastJoyPOV != ThisJoyPOV )
++			{
++				if( LastJoyPOV != IK_None )
++					CauseInputEvent( LastJoyPOV, IST_Release );
++				if( ThisJoyPOV != IK_None )	
++					CauseInputEvent( ThisJoyPOV, IST_Press );		
++				LastJoyPOV = ThisJoyPOV;
++			} 
++
++			MarkProcessed(IK_Joy13);
++			MarkProcessed(IK_Joy14);
++			MarkProcessed(IK_Joy15);
++			MarkProcessed(IK_Joy16);
++
++			// Pass axis to the input system.
++			ViewportInput()->DirectAxis( IK_JoyX, (State.lX - 32768.f) / 65535.f, DeltaSeconds );
++			ViewportInput()->DirectAxis( IK_JoyY, (State.lY - 32768.f) / 65535.f, DeltaSeconds );
++			ViewportInput()->DirectAxis( IK_JoyZ, (State.lZ - 32768.f) / 65535.f, DeltaSeconds );
++
++			ViewportInput()->DirectAxis( IK_JoyR, (State.lRx - 32768.f) / 65535.f, DeltaSeconds );
++			ViewportInput()->DirectAxis( IK_JoyU, (State.lRy - 32768.f) / 65535.f, DeltaSeconds );
++			ViewportInput()->DirectAxis( IK_JoyV, (State.lRz - 32768.f) / 65535.f, DeltaSeconds );
++
++			ViewportInput()->DirectAxis( IK_JoySlider1, (State.rglSlider[0] - 32768.f) / 65535.f, DeltaSeconds );
++			ViewportInput()->DirectAxis( IK_JoySlider2, (State.rglSlider[1] - 32768.f) / 65535.f, DeltaSeconds );
++
++			MarkProcessed(IK_JoyX);
++			MarkProcessed(IK_JoyY);
++			MarkProcessed(IK_JoyZ);
++			MarkProcessed(IK_JoyR);
++			MarkProcessed(IK_JoyU);
++			MarkProcessed(IK_JoyV);
++			MarkProcessed(IK_JoySlider1);
++			MarkProcessed(IK_JoySlider2);
++		}
++	}
++
++	DWORD	Elements			= 1;
++	DWORD	XYCount				= 0;
++
++	while( !GIsEditor && Elements && WinInput->Mouse )
++	{
++        DIDEVICEOBJECTDATA Event;
++ 
++		if (FAILED(hr = WinInput->Mouse->GetDeviceData(sizeof(DIDEVICEOBJECTDATA), &Event, &Elements, 0) ) )
++		{	
++			WinInput->Mouse->Acquire();
++			Elements = 0;
++		}
++		else if ( Elements )
++		{
++			// Look at the element to see what occurred
++			switch (Event.dwOfs) 
++			{
++			case DIMOFS_X: 
++				CauseInputEvent( IK_MouseX, IST_Axis, +MouseXMultiplier * ((INT) Event.dwData) );
++				XYCount++;
++				break;
++			case DIMOFS_Y: 
++				CauseInputEvent( IK_MouseY, IST_Axis, -MouseYMultiplier * ((INT) Event.dwData) );
++				XYCount++;
++				break; 
++			case DIMOFS_Z:
++				CauseInputEvent( IK_MouseW, IST_Axis, (INT) Event.dwData );
++				if( ((INT)Event.dwData) < 0)
++				{
++					CauseInputEvent( IK_MouseWheelDown, IST_Press );
++					CauseInputEvent( IK_MouseWheelDown, IST_Release );
++				}
++				else if( ((INT)Event.dwData) > 0)
++				{
++					CauseInputEvent( IK_MouseWheelUp, IST_Press );
++					CauseInputEvent( IK_MouseWheelUp, IST_Release );
++				}
++				break;
++            case DIMOFS_BUTTON0: // left button
++				if (Event.dwData & 0x80) 
++					CauseInputEvent( IK_LeftMouse, IST_Press );
++				else
++					CauseInputEvent( IK_LeftMouse, IST_Release );
++				break;
++			case DIMOFS_BUTTON1: // right button
++				if (Event.dwData & 0x80) 
++					CauseInputEvent( IK_RightMouse, IST_Press );
++				else
++					CauseInputEvent( IK_RightMouse, IST_Release );
++				break;
++			case DIMOFS_BUTTON2: // middle button
++				if (Event.dwData & 0x80) 
++					CauseInputEvent( IK_MiddleMouse, IST_Press );
++				else
++					CauseInputEvent( IK_MiddleMouse, IST_Release );
++				break;
++			case DIMOFS_BUTTON3:
++				if (Event.dwData & 0x80) 
++					CauseInputEvent( IK_Mouse4, IST_Press );
++				else
++					CauseInputEvent( IK_Mouse4, IST_Release );
++				break;
++			case DIMOFS_BUTTON4:
++				if (Event.dwData & 0x80) 
++					CauseInputEvent( IK_Mouse5, IST_Press );
++				else
++					CauseInputEvent( IK_Mouse5, IST_Release );
++				break;
++			case DIMOFS_BUTTON5:
++				if (Event.dwData & 0x80) 
++					CauseInputEvent( IK_Mouse6, IST_Press );
++				else
++					CauseInputEvent( IK_Mouse6, IST_Release );
++				break;
++			case DIMOFS_BUTTON6:
++				if (Event.dwData & 0x80) 
++					CauseInputEvent( IK_Mouse7, IST_Press );
++				else
++					CauseInputEvent( IK_Mouse7, IST_Release );
++				break;
++			case DIMOFS_BUTTON7:
++				if (Event.dwData & 0x80) 
++					CauseInputEvent( IK_Mouse8, IST_Press );
++				else
++					CauseInputEvent( IK_Mouse8, IST_Release );
++				break;
++			default:
++                break;        
++			}
++		}
++	}
++
++	GStats.DWORDStats(GWindowsInputStats.STATS_MouseInputCalls) += XYCount / 2;
++
++	unclock(GStats.DWORDStats(GWindowsInputStats.STATS_MouseInputCycles));
++	unguard;
++}
++
++void UWindowsDirectInputHandler::SetCooperative()
++{
++	guard(UWindowsDirectInputHandler::SetCooperative);
++	// Set cooperative level.
++	LPDIRECTINPUTDEVICE8 Mouse = GetOuterUWindowsDirectInput()->Mouse;
++	LPDIRECTINPUTDEVICE8 Joystick = GetOuterUWindowsDirectInput()->Joystick;
++
++	HRESULT hr;
++	DWORD Flags = DISCL_FOREGROUND | DISCL_NONEXCLUSIVE;
++
++	if (Mouse)
++	{
++		Mouse->Unacquire();
++		if(FAILED(hr = Mouse->SetCooperativeLevel(ViewportWindow()->hWnd, Flags)))
++			DirectInputError( TEXT("Couldn't set cooperative level"), hr, true );
++		Mouse->Acquire();
++	}
++
++	if (Joystick)
++	{
++		Joystick->Unacquire();
++		if(FAILED(hr = Joystick->SetCooperativeLevel(ViewportWindow()->hWnd, Flags)))
++			DirectInputError( TEXT("Couldn't set cooperative level"), hr, true );
++		Joystick->Acquire();
++	}
++
++	unguard;
++}
+diff --git a/WinDrv/Src/WinDrv.vcproj b/WinDrv/Src/WinDrv.vcproj
+index 21b6fde..13d263d 100644
+--- a/WinDrv/Src/WinDrv.vcproj
++++ b/WinDrv/Src/WinDrv.vcproj
+@@ -31,7 +31,7 @@
+ 				OmitFramePointers="TRUE"
+ 				OptimizeForProcessor="2"
+ 				AdditionalIncludeDirectories="..\..\Window\Inc;..\..\DirectX8\Inc;.;..\Inc;..\..\Core\Inc;..\..\Engine\Inc;..\..\metoolkit\include;..\..\Speech\Inc;&quot;..\..\Microsoft Platform SDK for Windows XP SP2\Include&quot;"
+-				PreprocessorDefinitions="NDEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0200;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=1;DO_GUARD_SLOW=0;DO_CHECK=1;DO_CHECK_SLOW=0;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
++				PreprocessorDefinitions="NDEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0501;_WIN32_WINNT=0x0501;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=1;DO_GUARD_SLOW=0;DO_CHECK=1;DO_CHECK_SLOW=0;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
+ 				StringPooling="TRUE"
+ 				BasicRuntimeChecks="0"
+ 				RuntimeLibrary="2"
+@@ -115,7 +115,7 @@
+ 				OmitFramePointers="FALSE"
+ 				OptimizeForProcessor="2"
+ 				AdditionalIncludeDirectories="..\..\Window\Inc;..\..\DirectX8\Inc;.;..\Inc;..\..\Core\Inc;..\..\Engine\Inc;..\..\metoolkit\include;..\..\Speech\Inc;&quot;..\..\Microsoft Platform SDK for Windows XP SP2\Include&quot;"
+-				PreprocessorDefinitions="_DEBUG;DEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0200;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=1;DO_GUARD_SLOW=0;DO_CHECK=1;DO_CHECK_SLOW=1;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
++				PreprocessorDefinitions="_DEBUG;DEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0501;_WIN32_WINNT=0x0501;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=1;DO_GUARD_SLOW=0;DO_CHECK=1;DO_CHECK_SLOW=1;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
+ 				StringPooling="TRUE"
+ 				MinimalRebuild="TRUE"
+ 				BasicRuntimeChecks="0"
+@@ -197,7 +197,7 @@
+ 				OmitFramePointers="FALSE"
+ 				OptimizeForProcessor="2"
+ 				AdditionalIncludeDirectories="..\..\Window\Inc;..\..\DirectX8\Inc;.;..\Inc;..\..\Core\Inc;..\..\Engine\Inc;..\..\metoolkit\include"
+-				PreprocessorDefinitions="_DEBUG;DEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0200;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=1;DO_GUARD_SLOW=1;DO_CHECK=1;DO_CHECK_SLOW=1;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
++				PreprocessorDefinitions="_DEBUG;DEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0501;_WIN32_WINNT=0x0501;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=1;DO_GUARD_SLOW=1;DO_CHECK=1;DO_CHECK_SLOW=1;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
+ 				StringPooling="TRUE"
+ 				MinimalRebuild="TRUE"
+ 				BasicRuntimeChecks="3"
+@@ -283,8 +283,8 @@
+ 				OmitFramePointers="TRUE"
+ 				OptimizeForProcessor="2"
+ 				AdditionalIncludeDirectories="..\..\Window\Inc;..\..\DirectX8\Inc;.;..\Inc;..\..\Core\Inc;..\..\Engine\Inc;..\..\metoolkit\include"
+-				PreprocessorDefinitions="NDEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0200;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=0;DO_GUARD_SLOW=0;DO_CHECK=0;DO_CHECK_SLOW=0;DO_STAT=0;DO_STAT_SLOW=0;DO_CLOCK=0;DO_CLOCK_SLOW=0"
+-				StringPooling="TRUE"
++				PreprocessorDefinitions="NDEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0501;_WIN32_WINNT=0x0501;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=0;DO_GUARD_SLOW=0;DO_CHECK=0;DO_CHECK_SLOW=0;DO_STAT=0;DO_STAT_SLOW=0;DO_CLOCK=0;DO_CLOCK_SLOW=0"
++    			StringPooling="TRUE"
+ 				BasicRuntimeChecks="0"
+ 				RuntimeLibrary="2"
+ 				StructMemberAlignment="3"
+@@ -370,7 +370,7 @@
+ 				OmitFramePointers="TRUE"
+ 				OptimizeForProcessor="2"
+ 				AdditionalIncludeDirectories="..\..\Window\Inc;..\..\DirectX8\Inc;.;..\Inc;..\..\Core\Inc;..\..\Engine\Inc;..\..\metoolkit\include"
+-				PreprocessorDefinitions="NDEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0200;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=1;DO_GUARD_SLOW=0;DO_CHECK=1;DO_CHECK_SLOW=0;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
++				PreprocessorDefinitions="NDEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0501;_WIN32_WINNT=0x0501;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=1;DO_GUARD_SLOW=0;DO_CHECK=1;DO_CHECK_SLOW=0;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
+ 				StringPooling="TRUE"
+ 				BasicRuntimeChecks="0"
+ 				RuntimeLibrary="2"
+@@ -453,7 +453,7 @@
+ 				OmitFramePointers="FALSE"
+ 				OptimizeForProcessor="0"
+ 				AdditionalIncludeDirectories="..\..\Window\Inc;..\..\DirectX8\Inc;.;..\Inc;..\..\Core\Inc;..\..\Engine\Inc;..\..\metoolkit\include"
+-				PreprocessorDefinitions="_DEBUG;DEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0200;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=1;DO_GUARD_SLOW=0;DO_CHECK=1;DO_CHECK_SLOW=1;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
++				PreprocessorDefinitions="_DEBUG;DEBUG;WINDRV_API=__declspec(dllexport);_WINDOWS;_WIN32_IE=0x0501;_WIN32_WINNT=0x0501;WIN32;UNICODE;DIRECTINPUT_VERSION=0x0800;DO_GUARD=1;DO_GUARD_SLOW=0;DO_CHECK=1;DO_CHECK_SLOW=1;DO_STAT=1;DO_STAT_SLOW=0;DO_CLOCK=1;DO_CLOCK_SLOW=0"
+ 				StringPooling="TRUE"
+ 				MinimalRebuild="FALSE"
+ 				BasicRuntimeChecks="0"
+diff --git a/WinDrv/Src/WinInput.cpp b/WinDrv/Src/WinInput.cpp
+new file mode 100644
+index 0000000..e22aef0
+--- /dev/null
++++ b/WinDrv/Src/WinInput.cpp
+@@ -0,0 +1,28 @@
++#include "WinDrv.h"
++
++IMPLEMENT_CLASS(UWindowsInput);
++IMPLEMENT_CLASS(UWindowsInputHandler);
++
++FWindowsInputStats GWindowsInputStats = FWindowsInputStats();
++
++FWindowsInputStats::FWindowsInputStats()
++{
++	guard(FWindowsInputStats::FWindowsInputStats);
++	appMemset( &STATS_FirstEntry, 0xFF, (PTRINT) &STATS_LastEntry - (PTRINT) &STATS_FirstEntry );
++	unguard;
++}
++
++void FWindowsInputStats::Init()
++{
++	// If already initialized retrieve indices from GStats.
++	if( GStats.Registered[STATSTYPE_Hardware] )
++	{
++		INT* Dummy = &STATS_MouseInputCalls;
++		for( INT i=0; i<GStats.Stats[STATSTYPE_Hardware].Num(); i++ )
++			*(Dummy++) = GStats.Stats[STATSTYPE_Hardware](i).Index;
++		return;
++	}
++
++	STATS_MouseInputCalls  = GStats.RegisterStats(STATSTYPE_Hardware, STATSDATATYPE_DWORD, TEXT("MouseInput"), TEXT("HARDWARE"), STATSUNIT_Default);
++	STATS_MouseInputCycles = GStats.RegisterStats(STATSTYPE_Hardware, STATSDATATYPE_DWORD, TEXT("MouseInput"), TEXT("HARDWARE"), STATSUNIT_MSec);
++}
+diff --git a/WinDrv/Src/WinRawInput.cpp b/WinDrv/Src/WinRawInput.cpp
+new file mode 100644
+index 0000000..3183f93
+--- /dev/null
++++ b/WinDrv/Src/WinRawInput.cpp
+@@ -0,0 +1,150 @@
++#include "WinDrv.h"
++
++IMPLEMENT_CLASS(UWindowsRawInput);
++IMPLEMENT_CLASS(UWindowsRawInputHandler);
++
++
++UWindowsInputHandler* UWindowsRawInput::NewHandler(const FName Name)
++{
++	guard(UWindowsRawInput::NewHandler);
++	return new(this, Name, RF_Keep) UWindowsRawInputHandler();
++	unguard;
++}
++
++void UWindowsRawInputHandler::RegisterDevice(UBOOL WithLegacy)
++{
++	guard(UWindowsRawInputHandler::RegisterDevice);
++	RAWINPUTDEVICE RawInputDevice;
++
++	DWORD flags = 0;
++	if (!WithLegacy)
++		flags |= RIDEV_CAPTUREMOUSE | RIDEV_NOLEGACY;
++
++	// Register mouse device
++	RawInputDevice.usUsagePage = 0x01;
++	RawInputDevice.usUsage = 0x02;
++	RawInputDevice.dwFlags = flags;
++	RawInputDevice.hwndTarget = ViewportWindow()->hWnd;
++
++	RegisterRawInputDevices(&RawInputDevice, 1, sizeof(RAWINPUTDEVICE));
++	unguard;
++}
++
++void UWindowsRawInputHandler::UpdateInput(FLOAT DeltaSeconds)
++{
++	guard(UWindowsRawInputHandler::UpdateInput);
++
++	// Raw Input is sent through the WM_INPUT message, so we have to message
++	// pump to feed input
++	MSG Msg;
++	while (PeekMessageX(&Msg, NULL, 0, 0, PM_REMOVE | PM_QS_INPUT))
++	{
++		if (Msg.message == WM_QUIT)
++		{
++			GIsRequestingExit = 1;
++		}
++
++		TranslateMessage(&Msg);
++		DispatchMessageX(&Msg);
++	}
++
++	unguard;
++}
++
++UBOOL UWindowsRawInputHandler::HandleWindowMessage(UINT iMessage, WPARAM wParam, LPARAM lParam)
++{
++	guard(UWindowsRawInputHandler::HandleWindowMessage);
++
++	if (iMessage != WM_INPUT)
++		return false;
++
++	clock(GStats.DWORDStats(GWindowsInputStats.STATS_MouseInputCycles));
++
++	UINT Size = 0;
++	GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &Size, sizeof(RAWINPUTHEADER));
++
++	BYTE* RawData = (BYTE*)appMalloc(Size, TEXT("RAWINPUT"));
++	check(RawData);
++
++	if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, RawData, &Size, sizeof(RAWINPUTHEADER)) == Size)
++	{
++		ProcessRawInput((RAWINPUT*)RawData);
++	}
++
++	appFree(RawData);
++	unclock(GStats.DWORDStats(GWindowsInputStats.STATS_MouseInputCycles));
++	return true;
++	unguard;
++
++}
++
++void UWindowsRawInputHandler::ProcessRawInput(RAWINPUT* RawInput)
++{
++	guard(UWindowsRawInputHandler::ProcessRawInput);
++
++	if (RawInput->header.dwType != RIM_TYPEMOUSE)
++		return;
++
++	UWindowsRawInput* WinInput = GetOuterUWindowsRawInput();
++	UWindowsClient* Client = WinInput->GetOuterUWindowsClient();
++
++	FLOAT MouseXMultiplier = Client->MouseXMultiplier;
++	FLOAT MouseYMultiplier = Client->MouseYMultiplier;
++
++	// Backward compatibility with old inis.
++	if (MouseXMultiplier == 0.f)
++		MouseXMultiplier = 1.f;
++	if (MouseYMultiplier == 0.f)
++		MouseYMultiplier = 1.f;
++
++	INT xPos = RawInput->data.mouse.lLastX;
++	INT yPos = RawInput->data.mouse.lLastY;
++
++	CauseInputEvent( IK_MouseX, IST_Axis, +MouseXMultiplier * xPos);
++	CauseInputEvent( IK_MouseY, IST_Axis, -MouseYMultiplier * yPos);
++
++	WORD flags = RawInput->data.mouse.usButtonFlags;
++
++	if (flags & RI_MOUSE_WHEEL)
++	{
++		SWORD delta = (SWORD)RawInput->data.mouse.usButtonData;
++		if (delta < 0)
++		{
++			CauseInputEvent(IK_MouseWheelDown, IST_Press);
++			CauseInputEvent(IK_MouseWheelDown, IST_Release);
++		}
++		else if (delta > 0)
++		{
++			CauseInputEvent(IK_MouseWheelUp, IST_Press);
++			CauseInputEvent(IK_MouseWheelUp, IST_Release);
++		}
++	}
++
++	if (flags & RI_MOUSE_BUTTON_1_DOWN)
++		CauseInputEvent(IK_LeftMouse, IST_Press);
++	if (flags & RI_MOUSE_BUTTON_1_UP)
++		CauseInputEvent(IK_LeftMouse, IST_Release);
++
++	if (flags & RI_MOUSE_BUTTON_2_DOWN)
++		CauseInputEvent(IK_RightMouse, IST_Press);
++	if (flags & RI_MOUSE_BUTTON_2_UP)
++		CauseInputEvent(IK_RightMouse, IST_Release);
++
++	if (flags & RI_MOUSE_BUTTON_3_DOWN)
++		CauseInputEvent(IK_MiddleMouse, IST_Press);
++	if (flags & RI_MOUSE_BUTTON_3_UP)
++		CauseInputEvent(IK_MiddleMouse, IST_Release);
++
++	if (flags & RI_MOUSE_BUTTON_4_DOWN)
++		CauseInputEvent(IK_Mouse4, IST_Press);
++	if (flags & RI_MOUSE_BUTTON_4_UP)
++		CauseInputEvent(IK_Mouse4, IST_Release);
++
++	if (flags & RI_MOUSE_BUTTON_5_DOWN)
++		CauseInputEvent(IK_Mouse5, IST_Press);
++	if (flags & RI_MOUSE_BUTTON_5_UP)
++		CauseInputEvent(IK_Mouse5, IST_Release);
++
++	GStats.DWORDStats(GWindowsInputStats.STATS_MouseInputCalls)++;
++	unguard;
++}
+diff --git a/WinDrv/Src/WinRawInputBuffer.cpp b/WinDrv/Src/WinRawInputBuffer.cpp
+new file mode 100644
+index 0000000..e4cb7e2
+--- /dev/null
++++ b/WinDrv/Src/WinRawInputBuffer.cpp
+@@ -0,0 +1,77 @@
++#include "WinDrv.h"
++
++IMPLEMENT_CLASS(UWindowsRawInputBuffer);
++IMPLEMENT_CLASS(UWindowsRawInputBufferHandler);
++
++#ifdef _WIN64
++typedef RAWINPUT RAWINPUTALIGNED;
++#else
++typedef struct {
++	RAWINPUTHEADER header;
++	BYTE padding[8]; // On WOW64, the data field starts at byte 24.
++	union {
++		RAWMOUSE mouse;
++		RAWKEYBOARD keyboard;
++	} data;
++} RAWINPUTALIGNED;
++#endif
++
++UWindowsInputHandler* UWindowsRawInputBuffer::NewHandler(const FName Name)
++{
++	guard(UWindowsRawInputBuffer::NewHandler);
++	return new(this, Name, RF_Keep) UWindowsRawInputBufferHandler();
++	unguard;
++}
++
++UBOOL UWindowsRawInputBuffer::SuppressRawMessages()
++{
++	return true;
++}
++
++void UWindowsRawInputBufferHandler::UpdateInput(FLOAT DeltaSeconds)
++{
++	guard(UWindowsRawInputBufferHandler::UpdateInput);
++	clock(GStats.DWORDStats(GWindowsInputStats.STATS_MouseInputCycles));
++
++	UINT Size = 0;
++
++	GetRawInputBuffer(NULL, &Size, sizeof(RAWINPUTHEADER));
++	if (Size > 0)
++	{
++		Size *= 64;
++
++		RAWINPUTALIGNED* RawBuffer = (RAWINPUTALIGNED*)appMalloc(Size, TEXT("RAWINPUTBUFFER"));
++		check(RawBuffer);
++
++		for (;;)
++		{
++			UINT Count = GetRawInputBuffer((RAWINPUT*)RawBuffer, &Size, sizeof(RAWINPUTHEADER));
++
++			if (Count == (UINT)-1)
++			{
++				debugf(TEXT("Received error during GetRawInputBuffer()"));
++				break;
++			}
++
++			if (Count == 0)
++				break;
++
++			RAWINPUT Current;
++			RAWINPUTALIGNED* RawInput = RawBuffer;
++
++			for (int j = 0; j < Count; j++)
++			{
++				Current.header = RawInput->header;
++				Current.data.mouse = RawInput->data.mouse;
++
++				ProcessRawInput(&Current);
++				RawInput = (RAWINPUTALIGNED*)NEXTRAWINPUTBLOCK((RAWINPUT*)RawInput);
++			}
++		}
++
++		appFree(RawBuffer);
++	}
++
++	unclock(GStats.DWORDStats(GWindowsInputStats.STATS_MouseInputCycles));
++	unguard;
++}
+diff --git a/WinDrv/Src/WinViewport.cpp b/WinDrv/Src/WinViewport.cpp
+index cbcb31d..05a35ab 100644
+--- a/WinDrv/Src/WinViewport.cpp
++++ b/WinDrv/Src/WinViewport.cpp
+@@ -70,12 +70,14 @@ IMPLEMENT_CLASS(UWindowsViewport);
+ //
+ // Constructor.
+ //
+-UWindowsViewport::UWindowsViewport()
++UWindowsViewport::UWindowsViewport(UWindowsInputHandler* InputHandler)
+ :	UViewport()
+ ,	Status( WIN_ViewportOpening )
++,	InputHandler(InputHandler)
+ {
+ 	guard(UWindowsViewport::UWindowsViewport);
+ 	Window = new WWindowsViewportWindow( this );
++	InputHandler->Viewport = this;
+ 
+ 	// Set color bytes based on screen resolution.
+ 	HWND hwndDesktop = GetDesktopWindow();
+@@ -107,64 +109,9 @@ UWindowsViewport::UWindowsViewport()
+ 	StandardCursors[5] = LoadCursorIdX(NULL, IDC_SIZEWE);
+ 	StandardCursors[6] = LoadCursorIdX(NULL, IDC_WAIT);
+ 
+-	// Get mouse. (shared between viewports)
+-	if ( !GIsEditor && (Mouse == NULL) )
++	if (!GIsEditor)
+ 	{
+-		HRESULT hr;
+-		if( FAILED( hr = DirectInput8->CreateDevice( GUID_SysMouse, &Mouse, NULL ) ) )
+-			DirectInputError( TEXT("Couldn't create mouse device"), hr, true ); 
+-
+-		// Set data format.
+-		if( FAILED( hr = Mouse->SetDataFormat( &c_dfDIMouse2 ) ) )
+-			DirectInputError( TEXT("Couldn't set mouse data format"), hr, true );
+-	
+-		// Set mouse buffer.
+-		DIPROPDWORD Property;
+-
+-		Property.diph.dwSize       = sizeof(DIPROPDWORD);
+-	    Property.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+-	    Property.diph.dwObj        = 0;
+-	    Property.diph.dwHow        = DIPH_DEVICE;
+-	    Property.dwData            = 1024;	// buffer size
+- 
+-		if( FAILED( hr = Mouse->SetProperty(DIPROP_BUFFERSIZE, &Property.diph) ) )
+-			DirectInputError( TEXT("Couldn't set mouse buffer size"), hr, true );
+-
+-		// Set mouse axis mode.
+-		Property.dwData				= DIPROPAXISMODE_REL;
+-
+-		if( FAILED( hr = Mouse->SetProperty(DIPROP_AXISMODE, &Property.diph) ) )
+-			DirectInputError( TEXT("Couldn't set relative axis mode for mouse"), hr, true );
+-	}
+-
+-	// Joystick. (shared between viewports)
+-	if ( !GIsEditor && (Joystick == NULL) )
+-	{
+-		HRESULT hr;
+-		if( FAILED( hr = DirectInput8->EnumDevices( 
+-			DI8DEVCLASS_GAMECTRL, 
+-			EnumJoysticksCallback,
+-			NULL, 
+-			DIEDFL_ATTACHEDONLY 
+-			)))
+-			DirectInputError( TEXT("Couldn't enumerate devices"), hr, true );
+-
+-		// Make sure we got a joystick
+-		if( Joystick != NULL)
+-		{
+-			// Set joystick data format.
+-			if( FAILED( hr = Joystick->SetDataFormat( &c_dfDIJoystick2 ) ) )
+-				DirectInputError( TEXT("Couldn't set joystick data format"), hr, true );
+-
+-			// Get caps.
+-			JoystickCaps.dwSize = sizeof(DIDEVCAPS);
+-			if ( FAILED( hr = Joystick->GetCapabilities(&JoystickCaps) ) )
+-				DirectInputError( TEXT("Couldn't get joystick caps"), hr, true );
+-
+-			// Set axis range.
+-		    if ( FAILED( hr = Joystick->EnumObjects( EnumAxesCallback, NULL, DIDFT_AXIS ) ) )
+-				DirectInputError( TEXT("Couldn't enumerate joystick axis"), hr, true );
+-		}
++		InputHandler->Init();
+ 	}
+ 
+ 	InitDebugger    = 0;
+@@ -200,17 +147,9 @@ void UWindowsViewport::Destroy()
+ 	}
+ 	GDebugger = NULL;
+ 
+-	// Release devices.
+-	if( Mouse )
+-	{
+-		Mouse->Release();
+-		Mouse = NULL;
+-	}
+-	if( Joystick )
+-	{
+-		Joystick->Release();
+-		Joystick = NULL;
+-	}
++	// Destroy input handler
++	InputHandler->ConditionalDestroy();
++	InputHandler = NULL;
+ 
+ 	if( BlitFlags & BLIT_Temporary )
+ 		appFree( ScreenPointer );
+@@ -626,25 +565,7 @@ void UWindowsViewport::OpenWindow( PTRINT InParentWindow, UBOOL IsTemporary, INT
+ 	if( !RenDev )
+ 		TryRenderDevice( TEXT("ini:Engine.Engine.RenderDevice"), NewX, NewY, !Windowed );
+ 
+-	// Set cooperative level.
+-	HRESULT hr;
+-	DWORD Flags = DISCL_FOREGROUND | DISCL_NONEXCLUSIVE;
+-
+-	if( Mouse )
+-	{
+-		Mouse->Unacquire();
+-		if( FAILED( hr = Mouse->SetCooperativeLevel( Window->hWnd, Flags ) ) )
+-			DirectInputError( TEXT("Couldn't set cooperative level"), hr, true );
+-		Mouse->Acquire();
+-	}
+-
+-	if( Joystick )
+-	{
+-		Joystick->Unacquire();
+-		if( FAILED( hr = Joystick->SetCooperativeLevel( Window->hWnd, Flags ) ) )
+-			DirectInputError( TEXT("Couldn't set cooperative level"), hr, true );
+-		Joystick->Acquire();
+-	}
++	InputHandler->SetCooperative();
+ 
+ 	check(RenDev);
+ 	RenDev->UpdateGamma( this );
+@@ -1002,8 +923,7 @@ void UWindowsViewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
+ 			ImmReleaseContext( Window->hWnd, hImc );
+ 	}
+ 
+-	BYTE Processed[256];
+-	appMemset( Processed, 0, 256 );
++	appMemset( ProcessedInput, 0, 256 );
+ 	//debugf(TEXT("%i"),(INT)GTempDouble);
+ 
+ 	// From Legend - fix for key strokes left in input buffer
+@@ -1019,206 +939,29 @@ void UWindowsViewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
+ 		KeyStates[IK_NumLock]		= GetKeyState(IK_NumLock);
+ 		KeyStates[IK_CapsLock]		= GetKeyState(IK_CapsLock);
+ 		KeyStates[IK_ScrollLock]	= GetKeyState(IK_ScrollLock);
+-        KeyStates[IK_Ctrl]			= GetKeyState(IK_Ctrl);
+-        KeyStates[IK_Shift]			= GetKeyState(IK_Shift);
+-        KeyStates[IK_Alt]			= GetKeyState(IK_Alt);
++		KeyStates[IK_Ctrl]			= GetKeyState(IK_Ctrl);
++		KeyStates[IK_Shift]			= GetKeyState(IK_Shift);
++		KeyStates[IK_Alt]			= GetKeyState(IK_Alt);
+ 
+ 		SetKeyboardState(KeyStates);
+ 	}
+ 
+-	HRESULT hr;
+-
+-	// DirectInput Joystick.
+-	if( Joystick && GetOuterUWindowsClient()->UseJoystick )
+-	{
+-		DIJOYSTATE2 State;
+- 
+-		// Poll the device and read the current state.
+-		if( FAILED( hr = Joystick->Poll() ) || FAILED( hr = Joystick->GetDeviceState( sizeof(DIJOYSTATE2), &State ) ))  
+-		{
+-			Joystick->Acquire();
+-		}
+-		else
+-		{
+-			// Pass buttons to the input system.
+-			for( INT i=0; i<12; i++ )
+-			{
+-				INT Button = IK_Joy1 + i;
+-				if( !Input->KeyDown( Button ) && (State.rgbButtons[i] & 0x80) )
+-					CauseInputEvent( Button, IST_Press );
+-				else if( Input->KeyDown( Button ) && !(State.rgbButtons[i] & 0x80) )
+-					CauseInputEvent( Button, IST_Release );
+-				Processed[IK_Joy1+i] = 1;				
+-			}
+-		
+-			// Joystick POV support.
+-			DWORD		POV			= State.rgdwPOV[0];
+-			UBOOL		POVCentered = (LOWORD(POV) == 0xFFFF);
+-			EInputKey	ThisJoyPOV	= IK_None;
+-
+-			if( POVCentered )
+-				ThisJoyPOV = IK_None;
+-			else if( POV <  4500 )
+-				ThisJoyPOV = IK_Joy13;
+-			else if( POV < 13500 )
+-				ThisJoyPOV = IK_Joy14;
+-			else if( POV < 22500 )
+-				ThisJoyPOV = IK_Joy15;
+-			else if( POV < 31500 )
+-				ThisJoyPOV = IK_Joy16;
+-			else
+-				ThisJoyPOV = IK_Joy13;
+-
+-			if( LastJoyPOV != ThisJoyPOV )
+-			{
+-				if( LastJoyPOV != IK_None )
+-					CauseInputEvent( LastJoyPOV, IST_Release );
+-				if( ThisJoyPOV != IK_None )	
+-					CauseInputEvent( ThisJoyPOV, IST_Press );		
+-				LastJoyPOV = ThisJoyPOV;
+-			} 
+-
+-			Processed[IK_Joy13] = 1;
+-			Processed[IK_Joy14] = 1;				
+-			Processed[IK_Joy15] = 1;				
+-			Processed[IK_Joy16] = 1;				
+-
+-			// Pass axis to the input system.
+-			Input->DirectAxis( IK_JoyX, (State.lX - 32768.f) / 65535.f, DeltaSeconds );
+-			Input->DirectAxis( IK_JoyY, (State.lY - 32768.f) / 65535.f, DeltaSeconds );
+-			Input->DirectAxis( IK_JoyZ, (State.lZ - 32768.f) / 65535.f, DeltaSeconds );
+-
+-			Input->DirectAxis( IK_JoyR, (State.lRx - 32768.f) / 65535.f, DeltaSeconds );
+-			Input->DirectAxis( IK_JoyU, (State.lRy - 32768.f) / 65535.f, DeltaSeconds );
+-			Input->DirectAxis( IK_JoyV, (State.lRz - 32768.f) / 65535.f, DeltaSeconds );
+-
+-			Input->DirectAxis( IK_JoySlider1, (State.rglSlider[0] - 32768.f) / 65535.f, DeltaSeconds );
+-			Input->DirectAxis( IK_JoySlider2, (State.rglSlider[1] - 32768.f) / 65535.f, DeltaSeconds );
+-
+-			Processed[IK_JoyX]			= 1;
+-			Processed[IK_JoyY]			= 1;
+-			Processed[IK_JoyZ]			= 1;
+-			Processed[IK_JoyR]			= 1;
+-			Processed[IK_JoyU]			= 1;
+-			Processed[IK_JoyV]			= 1;
+-			Processed[IK_JoySlider1]	= 1;
+-			Processed[IK_JoySlider2]	= 1;
+-		}
+-	}
+-
+-	FLOAT	MouseXMultiplier	= GetOuterUWindowsClient()->MouseXMultiplier,
+-			MouseYMultiplier	= GetOuterUWindowsClient()->MouseYMultiplier;
+-
+-	// Backward compatibility with old inis.
+-	if( MouseXMultiplier == 0.f )
+-		MouseXMultiplier = 1.f;
+-	if( MouseYMultiplier == 0.f )
+-		MouseYMultiplier = 1.f;
+-
+-	// DirectInput mouse.
+-	DWORD	Elements			= 1;
+-
+-	while( !GIsEditor && Elements && Mouse )
+-	{
+-        DIDEVICEOBJECTDATA Event;
+- 
+-		if (FAILED(hr = Mouse->GetDeviceData(sizeof(DIDEVICEOBJECTDATA), &Event, &Elements, 0) ) )
+-		{	
+-			Mouse->Acquire();
+-			Elements = 0;
+-		}
+-		else if ( Elements )
+-		{
+-			// Look at the element to see what occurred
+-			switch (Event.dwOfs) 
+-			{
+-			case DIMOFS_X: 
+-				CauseInputEvent( IK_MouseX, IST_Axis, +MouseXMultiplier * ((INT) Event.dwData) );
+-				break;
+-			case DIMOFS_Y: 
+-				CauseInputEvent( IK_MouseY, IST_Axis, -MouseYMultiplier * ((INT) Event.dwData) );
+-				break; 
+-			case DIMOFS_Z:
+-				CauseInputEvent( IK_MouseW, IST_Axis, (INT) Event.dwData );
+-				if( ((INT)Event.dwData) < 0)
+-				{
+-					CauseInputEvent( IK_MouseWheelDown, IST_Press );
+-					CauseInputEvent( IK_MouseWheelDown, IST_Release );
+-				}
+-				else if( ((INT)Event.dwData) > 0)
+-				{
+-					CauseInputEvent( IK_MouseWheelUp, IST_Press );
+-					CauseInputEvent( IK_MouseWheelUp, IST_Release );
+-				}
+-				break;
+-            case DIMOFS_BUTTON0: // left button
+-				if (Event.dwData & 0x80) 
+-					CauseInputEvent( IK_LeftMouse, IST_Press );
+-				else
+-					CauseInputEvent( IK_LeftMouse, IST_Release );
+-				break;
+-			case DIMOFS_BUTTON1: // right button
+-				if (Event.dwData & 0x80) 
+-					CauseInputEvent( IK_RightMouse, IST_Press );
+-				else
+-					CauseInputEvent( IK_RightMouse, IST_Release );
+-				break;
+-			case DIMOFS_BUTTON2: // middle button
+-				if (Event.dwData & 0x80) 
+-					CauseInputEvent( IK_MiddleMouse, IST_Press );
+-				else
+-					CauseInputEvent( IK_MiddleMouse, IST_Release );
+-				break;
+-			case DIMOFS_BUTTON3:
+-				if (Event.dwData & 0x80) 
+-					CauseInputEvent( IK_Mouse4, IST_Press );
+-				else
+-					CauseInputEvent( IK_Mouse4, IST_Release );
+-				break;
+-			case DIMOFS_BUTTON4:
+-				if (Event.dwData & 0x80) 
+-					CauseInputEvent( IK_Mouse5, IST_Press );
+-				else
+-					CauseInputEvent( IK_Mouse5, IST_Release );
+-				break;
+-			case DIMOFS_BUTTON5:
+-				if (Event.dwData & 0x80) 
+-					CauseInputEvent( IK_Mouse6, IST_Press );
+-				else
+-					CauseInputEvent( IK_Mouse6, IST_Release );
+-				break;
+-			case DIMOFS_BUTTON6:
+-				if (Event.dwData & 0x80) 
+-					CauseInputEvent( IK_Mouse7, IST_Press );
+-				else
+-					CauseInputEvent( IK_Mouse7, IST_Release );
+-				break;
+-			case DIMOFS_BUTTON7:
+-				if (Event.dwData & 0x80) 
+-					CauseInputEvent( IK_Mouse8, IST_Press );
+-				else
+-					CauseInputEvent( IK_Mouse8, IST_Release );
+-				break;
+-			default:
+-                break;        
+-			}
+-		}
+-	}
++	InputHandler->UpdateInput(DeltaSeconds);
+ 
+-	Processed[IK_LeftMouse]		= 1;
+-	Processed[IK_RightMouse]	= 1;
+-	Processed[IK_MiddleMouse]	= 1;
+-	Processed[IK_Mouse4]		= 1;
+-	Processed[IK_Mouse5]		= 1;
+-	Processed[IK_Mouse6]		= 1;
+-	Processed[IK_Mouse7]		= 1;
+-	Processed[IK_Mouse8]		= 1;
++	ProcessedInput[IK_LeftMouse]	= 1;
++	ProcessedInput[IK_RightMouse]	= 1;
++	ProcessedInput[IK_MiddleMouse]	= 1;
++	ProcessedInput[IK_Mouse4]		= 1;
++	ProcessedInput[IK_Mouse5]		= 1;
++	ProcessedInput[IK_Mouse6]		= 1;
++	ProcessedInput[IK_Mouse7]		= 1;
++	ProcessedInput[IK_Mouse8]		= 1;
+ 
+ 	// Keyboard.
+ 	Reset = Reset && GetFocus()==Window->hWnd;
+ 	for( INT i=0; i<256; i++ )
+ 	{
+-		if( !Processed[i] )
++		if( !ProcessedInput[i] )
+ 		{
+ 			if( !Input->KeyDown(i) )
+ 			{
+@@ -1238,6 +981,7 @@ void UWindowsViewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
+ 	unguard;
+ }
+ 
++
+ void UWindowsViewport::UpdateMousePosition()
+ {
+ 	guard(UWindowsViewport::UpdateMousePosition);
+@@ -1304,6 +1048,10 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+ 		wParam   = MAKEWPARAM(0,wParam);
+ 	}
+ 
++	// Allow input handler to intercept window messages
++	if (InputHandler->HandleWindowMessage(iMessage, wParam, lParam))
++		return 0;
++
+ 	// Message handler.
+ 	switch( iMessage )
+ 	{
+@@ -1739,10 +1487,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+ 			Client->InMenuLoop = 1;
+ 			SetDrag( 0 );
+ 			UpdateWindowFrame();
+-			if( Mouse )
+-				Mouse->Unacquire();
+-			if( Joystick )
+-				Joystick->Unacquire();
++			InputHandler->Unacquire();
+ 			return 0;
+ 			unguard;
+ 		}
+@@ -1750,10 +1495,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+ 		{
+ 			guard(WM_EXITMENULOOP);
+ 			Client->InMenuLoop = 0;
+-			if( Mouse )
+-				Mouse->Acquire();
+-			if( Joystick )
+-				Joystick->Acquire();
++			InputHandler->Acquire();
+ 			return 0;
+ 			unguard;
+ 		}
+@@ -1767,6 +1509,10 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+ 		case WM_MOUSEWHEEL:
+ 		{		
+ 			guard(WM_MOUSEWHEEL);
++
++			if (IsFullscreen())
++				return DefWindowProcX( Window->hWnd, iMessage, wParam, lParam );
++
+ 			SWORD zDelta = HIWORD(wParam);
+ 			if( GIsEditor && zDelta )
+ 			{
+@@ -1924,7 +1670,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+ 				}
+ 			}
+ 
+-			else UpdateMousePosition();
++			else if (!IsFullscreen()) UpdateMousePosition();
+ //				return DefWindowProcX( Window->hWnd, iMessage, wParam, lParam );
+ 			return 0;
+ 			unguard;
+@@ -2006,6 +1752,8 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+ 				RenDev->RestoreGamma();
+ 
+ 			SetMouseCapture( 0, 0, 0 );
++
++			InputHandler->Unacquire();
+ 			
+ 			SetDrag( 0 );
+ 			if( !GIsEditor )
+@@ -2039,10 +1787,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+ 				Input->ResetInput();
+ 
+ 			// Acquire devices.
+-			if( Mouse )
+-				Mouse->Acquire();
+-			if( Joystick )
+-				Joystick->Acquire();
++			InputHandler->Acquire();
+ 
+ 			// Make this viewport current.
+ 			GetOuterUClient()->MakeCurrent( this );
+@@ -2603,40 +2348,6 @@ UBOOL UWindowsViewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNe
+ 	unguard;
+ }
+ 
+-//
+-// DirectInput joystick callback.
+-//
+-BOOL CALLBACK UWindowsViewport::EnumJoysticksCallback( const DIDEVICEINSTANCE* pdidInstance, VOID* pContext )
+-{
+-    HRESULT hr;
+-	
+-	if( FAILED( hr = DirectInput8->CreateDevice( pdidInstance->guidInstance, &Joystick, NULL ) ) ) 
+-	{
+-		Joystick = NULL;
+-        return DIENUM_CONTINUE;
+-	}
+-
+-    return DIENUM_STOP;
+-}
+-
+-BOOL CALLBACK UWindowsViewport::EnumAxesCallback( const DIDEVICEOBJECTINSTANCE* pdidoi, VOID* pContext )
+-{
+-    DIPROPRANGE diprg; 
+-    diprg.diph.dwSize       = sizeof(DIPROPRANGE); 
+-    diprg.diph.dwHeaderSize = sizeof(DIPROPHEADER); 
+-    diprg.diph.dwHow        = DIPH_BYOFFSET; 
+-    diprg.diph.dwObj        = pdidoi->dwOfs; // Specify the enumerated axis
+-    diprg.lMin              = 0;//-32768; 
+-    diprg.lMax              = 65535;//+32767; 
+-    
+-	// Set the range for the axis
+-	Joystick->SetProperty( DIPROP_RANGE, &diprg.diph );
+-//	if( FAILED( Joystick->SetProperty( DIPROP_RANGE, &diprg.diph ) ) )
+-//		return DIENUM_STOP;
+-
+-    return DIENUM_CONTINUE;
+-}
+-
+ void UWindowsViewport::LoadSRGrammar( UBOOL ReloadCurrentGrammar, const FString& Grammar )
+ {
+ 	guard(UWindowsViewport::LoadSRGrammar);
+@@ -2956,11 +2667,6 @@ UBOOL UWindowsViewport::FireWallHack(INT Cmd)
+ 
+ }
+ 
+-LPDIRECTINPUTDEVICE8	UWindowsViewport::Mouse					= NULL;
+-LPDIRECTINPUTDEVICE8	UWindowsViewport::Joystick				= NULL;
+-LPDIRECTINPUT8			UWindowsViewport::DirectInput8			= NULL;
+-DIDEVCAPS				UWindowsViewport::JoystickCaps;
+-
+ UBOOL					UWindowsViewport::CoInitialized			= 0;
+ 
+ #ifndef _WIN64
+diff --git a/WinDrv/meson.build b/WinDrv/meson.build
+index db61993..dd24649 100644
+--- a/WinDrv/meson.build
++++ b/WinDrv/meson.build
+@@ -6,11 +6,15 @@ windrv_lib = library('WinDrv',
+   'Src/WinDrv.cpp',
+   'Src/WinSpeech.cpp',
+   'Src/WinViewport.cpp',
++  'Src/WinInput.cpp',
++  'Src/WinDirectInput.cpp',
++  'Src/WinRawInput.cpp',
++  'Src/WinRawInputBuffer.cpp',
+   cpp_args: [
+     '/MD',
+     '/DWINDRV_API=__declspec(dllexport)',
+-    '/D_WIN32_IE=0x0200',
+-    '/D_WIN32_IE=0x0200',
++    '/D_WIN32_IE=0x0501',
++    '/D_WIN32_WINNT=0x0501',
+     '/DWITH_LIPSINC',
+   ],
+   link_args: [
+diff --git a/Window/meson.build b/Window/meson.build
+index a1c3348..365be36 100644
+--- a/Window/meson.build
++++ b/Window/meson.build
+@@ -7,7 +7,8 @@ window_lib = library('Window',
+   cpp_args: [
+     '/MD',
+     '/DWINDOW_API=__declspec(dllexport)',
+-    '/D_WIN32_IE=0x0200',
++    '/D_WIN32_IE=0x0501',
++    '/D_WIN32_WINNT=0x0501',
+     '/DWITH_LIPSINC',
+   ],
+   link_args: [
+diff --git a/justfile b/justfile
+index ef38026..42e4d7b 100644
+--- a/justfile
++++ b/justfile
+@@ -4,6 +4,8 @@ debug := env_var_or_default("DEBUG", "")
+ buildtype := if debug == "1" { "debug" } else { "release" }
+ ucc_args := if buildtype == "debug" { "-debug" } else { "" }
+ 
++map := "DM-Gael"
++
+ install: install-bin ucc-make
+ 
+ install-bin: build
+@@ -22,7 +24,7 @@ clean:
+   ninja -C build/{{buildtype}} clean
+ 
+ play:
+-  System\UT2004.exe -windowed -log
++  System\UT2004.exe {{map}} -windowed -log
+ 
+ ucc-make:
+   System\UccDepend.exe System\Default.ini {{ucc_args}}
+-- 
+2.31.1.windows.1
+

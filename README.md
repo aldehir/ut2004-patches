@@ -34,6 +34,11 @@ patches to fully patch your UT2004 installation.
   was a misleading metric, as it only occurs when there are no OS events to
   process. The counter now reports an accurate fps.
 
+* **Implement RawInput and RawInputBuffer mouse input modes.**
+
+  Use `setmouseinput` to set your mouse input mode to one of: `directinput`,
+  `rawinput`, or `rawinputbuffer`.
+
 
 # Building
 
