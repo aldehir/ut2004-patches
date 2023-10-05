@@ -1,6 +1,6 @@
-From bd116ae6a279083dfe17e036a9231e34c140a644 Mon Sep 17 00:00:00 2001
+From c91c42fc94e5fef2ff009b769543a1ea8452c077 Mon Sep 17 00:00:00 2001
 From: Alde Rojas <hello@alde.dev>
-Date: Wed, 4 Oct 2023 22:33:00 -0500
+Date: Thu, 5 Oct 2023 00:47:25 -0500
 Subject: [PATCH] Implement RawInput and RawInputBuffer
 
 Add the `MouseInputClass` configuration option under `WinDrv.WindowsClient`.
@@ -23,18 +23,18 @@ Options from the console are:
  Engine/Src/UnCamMgr.cpp          |   7 +
  Engine/meson.build               |   4 +-
  Launch/meson.build               |   1 +
- WinDrv/Inc/WinDrv.h              | 175 ++++++++++++-
+ WinDrv/Inc/WinDrv.h              | 173 ++++++++++++-
  WinDrv/Src/WinClient.cpp         |  70 ++++--
  WinDrv/Src/WinDirectInput.cpp    | 408 +++++++++++++++++++++++++++++++
  WinDrv/Src/WinDrv.vcproj         |  14 +-
  WinDrv/Src/WinInput.cpp          |  28 +++
  WinDrv/Src/WinRawInput.cpp       | 150 ++++++++++++
  WinDrv/Src/WinRawInputBuffer.cpp |  77 ++++++
- WinDrv/Src/WinViewport.cpp       | 370 +++-------------------------
+ WinDrv/Src/WinViewport.cpp       | 365 +++------------------------
  WinDrv/meson.build               |   8 +-
  Window/meson.build               |   3 +-
  justfile                         |   4 +-
- 18 files changed, 970 insertions(+), 370 deletions(-)
+ 17 files changed, 963 insertions(+), 370 deletions(-)
  create mode 100644 WinDrv/Src/WinDirectInput.cpp
  create mode 100644 WinDrv/Src/WinInput.cpp
  create mode 100644 WinDrv/Src/WinRawInput.cpp
@@ -141,7 +141,7 @@ index 6d628c1..32b48b4 100644
    ],
    link_args: [
 diff --git a/WinDrv/Inc/WinDrv.h b/WinDrv/Inc/WinDrv.h
-index d899118..777a9cc 100644
+index d899118..668c216 100644
 --- a/WinDrv/Inc/WinDrv.h
 +++ b/WinDrv/Inc/WinDrv.h
 @@ -68,6 +68,7 @@ Revision history:
@@ -170,20 +170,7 @@ index d899118..777a9cc 100644
  };
  
  /*-----------------------------------------------------------------------------
-@@ -140,6 +145,7 @@ enum EWinViewportStatus
- 	WIN_ViewportClosing	= 2, // Viewport is closing and CloseViewport has been called.
- };
- 
-+
- //
- // A Windows viewport.
- //
-@@ -163,16 +169,11 @@ class DLL_EXPORT UWindowsViewport : public UViewport
- 	INT					CurrentIMESize;
- 	FString				CurrentGrammar;
- 
-+
- #if WITH_DIVX
+@@ -167,12 +172,6 @@ class DLL_EXPORT UWindowsViewport : public UViewport
  	FDivXEncoder*		DivXEncoder;
  #endif
  
@@ -196,7 +183,7 @@ index d899118..777a9cc 100644
  	static UBOOL					CoInitialized;
  	
  	// Speech recognition.
-@@ -189,8 +190,14 @@ class DLL_EXPORT UWindowsViewport : public UViewport
+@@ -189,8 +188,14 @@ class DLL_EXPORT UWindowsViewport : public UViewport
  	INT					SavedCaps;
  	HCURSOR				StandardCursors[10];
  
@@ -212,7 +199,7 @@ index d899118..777a9cc 100644
  
  	// UObject interface.
  	void Destroy();
-@@ -259,9 +266,161 @@ class DLL_EXPORT WWindowsViewportWindow : public WWindow
+@@ -259,9 +264,161 @@ class DLL_EXPORT WWindowsViewportWindow : public WWindow
  	}
  };
  
@@ -376,7 +363,7 @@ index d899118..777a9cc 100644
  #endif //_INC_WINDRV
  /*-----------------------------------------------------------------------------
 diff --git a/WinDrv/Src/WinClient.cpp b/WinDrv/Src/WinClient.cpp
-index 584705b..b0f6f1a 100644
+index 584705b..4f437cc 100644
 --- a/WinDrv/Src/WinClient.cpp
 +++ b/WinDrv/Src/WinClient.cpp
 @@ -30,6 +30,7 @@ UWindowsClient::UWindowsClient()
@@ -418,11 +405,11 @@ index 584705b..b0f6f1a 100644
  
 +UBOOL UWindowsClient::SuppressRawMessages()
 +{
-+	// Handle all incoming messages.
 +	guard(UWindowsClient::SuppressRawMessages);
 +	if (Input)
 +		return Input->SuppressRawMessages();
 +
++	// Handle all incoming messages.
 +	return false;
 +	unguard;
 +}
@@ -1246,7 +1233,7 @@ index 0000000..e4cb7e2
 +	unguard;
 +}
 diff --git a/WinDrv/Src/WinViewport.cpp b/WinDrv/Src/WinViewport.cpp
-index cbcb31d..05a35ab 100644
+index cbcb31d..5bedf51 100644
 --- a/WinDrv/Src/WinViewport.cpp
 +++ b/WinDrv/Src/WinViewport.cpp
 @@ -70,12 +70,14 @@ IMPLEMENT_CLASS(UWindowsViewport);
@@ -1610,15 +1597,7 @@ index cbcb31d..05a35ab 100644
  		{
  			if( !Input->KeyDown(i) )
  			{
-@@ -1238,6 +981,7 @@ void UWindowsViewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
- 	unguard;
- }
- 
-+
- void UWindowsViewport::UpdateMousePosition()
- {
- 	guard(UWindowsViewport::UpdateMousePosition);
-@@ -1304,6 +1048,10 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+@@ -1304,6 +1047,10 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
  		wParam   = MAKEWPARAM(0,wParam);
  	}
  
@@ -1629,7 +1608,7 @@ index cbcb31d..05a35ab 100644
  	// Message handler.
  	switch( iMessage )
  	{
-@@ -1739,10 +1487,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+@@ -1739,10 +1486,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
  			Client->InMenuLoop = 1;
  			SetDrag( 0 );
  			UpdateWindowFrame();
@@ -1641,7 +1620,7 @@ index cbcb31d..05a35ab 100644
  			return 0;
  			unguard;
  		}
-@@ -1750,10 +1495,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+@@ -1750,10 +1494,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
  		{
  			guard(WM_EXITMENULOOP);
  			Client->InMenuLoop = 0;
@@ -1653,18 +1632,7 @@ index cbcb31d..05a35ab 100644
  			return 0;
  			unguard;
  		}
-@@ -1767,6 +1509,10 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
- 		case WM_MOUSEWHEEL:
- 		{		
- 			guard(WM_MOUSEWHEEL);
-+
-+			if (IsFullscreen())
-+				return DefWindowProcX( Window->hWnd, iMessage, wParam, lParam );
-+
- 			SWORD zDelta = HIWORD(wParam);
- 			if( GIsEditor && zDelta )
- 			{
-@@ -1924,7 +1670,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+@@ -1924,7 +1665,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
  				}
  			}
  
@@ -1673,7 +1641,7 @@ index cbcb31d..05a35ab 100644
  //				return DefWindowProcX( Window->hWnd, iMessage, wParam, lParam );
  			return 0;
  			unguard;
-@@ -2006,6 +1752,8 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+@@ -2006,6 +1747,8 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
  				RenDev->RestoreGamma();
  
  			SetMouseCapture( 0, 0, 0 );
@@ -1682,7 +1650,7 @@ index cbcb31d..05a35ab 100644
  			
  			SetDrag( 0 );
  			if( !GIsEditor )
-@@ -2039,10 +1787,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
+@@ -2039,10 +1782,7 @@ LRESULT UWindowsViewport::ViewportWndProc( UINT iMessage, WPARAM wParam, LPARAM
  				Input->ResetInput();
  
  			// Acquire devices.
@@ -1694,7 +1662,7 @@ index cbcb31d..05a35ab 100644
  
  			// Make this viewport current.
  			GetOuterUClient()->MakeCurrent( this );
-@@ -2603,40 +2348,6 @@ UBOOL UWindowsViewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNe
+@@ -2603,40 +2343,6 @@ UBOOL UWindowsViewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNe
  	unguard;
  }
  
@@ -1735,7 +1703,7 @@ index cbcb31d..05a35ab 100644
  void UWindowsViewport::LoadSRGrammar( UBOOL ReloadCurrentGrammar, const FString& Grammar )
  {
  	guard(UWindowsViewport::LoadSRGrammar);
-@@ -2956,11 +2667,6 @@ UBOOL UWindowsViewport::FireWallHack(INT Cmd)
+@@ -2956,11 +2662,6 @@ UBOOL UWindowsViewport::FireWallHack(INT Cmd)
  
  }
  
