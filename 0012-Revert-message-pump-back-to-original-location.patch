@@ -1,0 +1,287 @@
+From 23077f80f678c131f3627f75fe697ce5feba8c08 Mon Sep 17 00:00:00 2001
+From: Alde Rojas <hello@alde.dev>
+Date: Fri, 6 Oct 2023 01:38:28 -0500
+Subject: [PATCH] Revert message pump back to original location
+
+Unfortunately there are some timing issues with the message pump. Move
+it back to the original location and encourage use of raw input to
+minimize FPS hitches from mouse events.
+---
+ Engine/Inc/UnCamera.h            |  1 +
+ Engine/Inc/UnEngineWin.h         | 68 ++++++++++++++++++--------------
+ Engine/Src/UnCamMgr.cpp          |  5 +++
+ WinDrv/Inc/WinDrv.h              |  4 +-
+ WinDrv/Src/WinRawInput.cpp       | 27 +++++++++++++
+ WinDrv/Src/WinRawInputBuffer.cpp |  5 ---
+ WinDrv/Src/WinViewport.cpp       | 37 -----------------
+ 7 files changed, 74 insertions(+), 73 deletions(-)
+
+diff --git a/Engine/Inc/UnCamera.h b/Engine/Inc/UnCamera.h
+index a8752ee..d6b43e5 100644
+--- a/Engine/Inc/UnCamera.h
++++ b/Engine/Inc/UnCamera.h
+@@ -530,6 +530,7 @@ class ENGINE_API UClient : public UObject
+ 	virtual void MakeCurrent( UViewport* NewViewport )=0;
+ 	virtual UViewport* GetLastCurrent()=0;
+ 	virtual void TeardownSR()=0;
++	virtual UBOOL SuppressRawMessages();
+ 
+     // gam ---
+     INT GetTextureLODBias (ELODSet LODSet);
+diff --git a/Engine/Inc/UnEngineWin.h b/Engine/Inc/UnEngineWin.h
+index 8a58dce..1c2d054 100644
+--- a/Engine/Inc/UnEngineWin.h
++++ b/Engine/Inc/UnEngineWin.h
+@@ -957,17 +957,52 @@ inline void	CMainLoop::RunLoop(void)
+ 	}
+ 	unguard;
+ 
++	// Enforce optional maximum tick rate.
++	guard(EnforceTickRate);
++	if( !GUseFixedTimeStep && IncludeMessaging )
++	{
++		FLOAT MaxTickRate = Engine->GetMaxTickRate();
++		if( MaxTickRate>0.0 )
++		{
++			DOUBLE CurrentTime = appSeconds();
++			FLOAT WaitTime = (1.0/MaxTickRate) - (CurrentTime-OldTime);
++			DOUBLE EndTime = CurrentTime + WaitTime;
++
++			// If waiting over 5ms, then wait for the majority of the time but
++			// give 2ms of slack.
++			if (WaitTime > 5 / 1000.0f) {
++				appSleep(WaitTime - 0.002);
++			}
++
++			// Yield CPU until we reach desired end time
++			do {
++				appSleep(0.0f);
++			} while (appSeconds() < EndTime);
++		}
++	}
++	unguard;
++
+ 	if( IncludeMessaging ) 
+ 	{
+ 		// Handle all incoming messages.
+ 		guard(MessagePump);
+ 		MSG Msg;
+ 
+-		// If we're not the editor, only handle non-input messages.
+-		UINT flags = GIsEditor ? 0 : PM_QS_PAINT | PM_QS_POSTMESSAGE | PM_QS_SENDMESSAGE;
+-
+-		while ( PeekMessageX( &Msg, NULL, 0, 0, PM_REMOVE | flags ))
++		for (;;)
+ 		{
++			if ( Engine->Client->SuppressRawMessages() )
++			{
++				if (!PeekMessageX(&Msg, NULL, 0, WM_INPUT-1, PM_REMOVE)
++					&& !PeekMessageX(&Msg, NULL, WM_INPUT+1, (UINT)-1, PM_REMOVE))
++				{
++					break;
++				}
++			}
++			else if (!PeekMessageX(&Msg, NULL, 0, 0, PM_REMOVE))
++			{
++				break;
++			}
++
+ 			if( Msg.message == WM_QUIT )
+ 				GIsRequestingExit = 1;
+ 
+@@ -1007,31 +1042,6 @@ inline void	CMainLoop::RunLoop(void)
+ 		unguard;
+ 	}
+ 
+-	// Enforce optional maximum tick rate.
+-	guard(EnforceTickRate);
+-	if( !GUseFixedTimeStep && IncludeMessaging )
+-	{
+-		FLOAT MaxTickRate = Engine->GetMaxTickRate();
+-		if( MaxTickRate>0.0 )
+-		{
+-			DOUBLE CurrentTime = appSeconds();
+-			FLOAT WaitTime = (1.0/MaxTickRate) - (CurrentTime-OldTime);
+-			DOUBLE EndTime = CurrentTime + WaitTime;
+-
+-			// If waiting over 5ms, then wait for the majority of the time but
+-			// give 2ms of slack.
+-			if (WaitTime > 5 / 1000.0f) {
+-				appSleep(WaitTime - 0.002);
+-			}
+-
+-			// Yield CPU until we reach desired end time
+-			do {
+-				appSleep(0.0f);
+-			} while (appSeconds() < EndTime);
+-		}
+-	}
+-	unguard;
+-
+ 	GStats.DWORDStats( GEngineStats.STATS_Frame_TotalCycles ) = appCycles() - LastFrameCycles;
+ 	GStats.DWORDStats( GEngineStats.STATS_Game_ScriptCycles ) = GScriptCycles;
+ 	GScriptCycles	= 0;
+diff --git a/Engine/Src/UnCamMgr.cpp b/Engine/Src/UnCamMgr.cpp
+index 485ff1e..30573cd 100644
+--- a/Engine/Src/UnCamMgr.cpp
++++ b/Engine/Src/UnCamMgr.cpp
+@@ -239,6 +239,11 @@ INT UClient::GetTextureLODBias (ELODSet LODSet)
+ 	unguard;
+ }
+ 
++UBOOL UClient::SuppressRawMessages()
++{
++	return false;
++}
++
+ IMPLEMENT_CLASS(UClient);
+ 
+ /*-----------------------------------------------------------------------------
+diff --git a/WinDrv/Inc/WinDrv.h b/WinDrv/Inc/WinDrv.h
+index ea72dc1..0d841ad 100644
+--- a/WinDrv/Inc/WinDrv.h
++++ b/WinDrv/Inc/WinDrv.h
+@@ -243,7 +243,6 @@ class DLL_EXPORT UWindowsViewport : public UViewport
+ 	static BOOL    CALLBACK EnumAxesCallback( const DIDEVICEOBJECTINSTANCE* pdidoi, VOID* pContext );
+ 
+ 	virtual UBOOL FireWallHack(INT Cmd);
+-	void PumpInputMessages();
+ };
+ 
+ //
+@@ -359,6 +358,7 @@ class DLL_EXPORT UWindowsRawInput : public UWindowsInput
+ 	DECLARE_WITHIN(UWindowsClient)
+ 
+ 	UWindowsInputHandler* NewHandler(const FName Name);
++	UBOOL SuppressRawMessages();
+ };
+ 
+ class DLL_EXPORT UWindowsRawInputHandler : public UWindowsInputHandler
+@@ -368,6 +368,7 @@ class DLL_EXPORT UWindowsRawInputHandler : public UWindowsInputHandler
+ 
+ 	UBOOL HandleWindowMessage(UINT iMessage, WPARAM wParam, LPARAM lParam);
+ 
++	void UpdateInput(FLOAT DeltaSeconds);
+ 	void SetCooperative() { RegisterDevice(true); }
+ 	void Acquire() { RegisterDevice(true); }
+ 	void Unacquire() { RegisterDevice(false); }
+@@ -385,7 +386,6 @@ class DLL_EXPORT UWindowsRawInputBuffer : public UWindowsRawInput
+ 	DECLARE_WITHIN(UWindowsClient)
+ 
+ 	UWindowsInputHandler* NewHandler(const FName Name);
+-	UBOOL SuppressRawMessages();
+ };
+ 
+ class DLL_EXPORT UWindowsRawInputBufferHandler : public UWindowsRawInputHandler
+diff --git a/WinDrv/Src/WinRawInput.cpp b/WinDrv/Src/WinRawInput.cpp
+index f749ba2..64662b6 100644
+--- a/WinDrv/Src/WinRawInput.cpp
++++ b/WinDrv/Src/WinRawInput.cpp
+@@ -31,6 +31,33 @@ void UWindowsRawInputHandler::RegisterDevice(UBOOL SuppressLegacy)
+ 	unguard;
+ }
+ 
++UBOOL UWindowsRawInput::SuppressRawMessages()
++{
++	return true;
++}
++
++void UWindowsRawInputHandler::UpdateInput(FLOAT DeltaSeconds)
++{
++	guard(UWindowsRawInputHandler::UpdateInput);
++	MSG Msg;
++
++	// Drain any remaining WM_INPUT messages from the message queue
++	while (PeekMessageX(&Msg, NULL, WM_INPUT, WM_INPUT, PM_REMOVE))
++	{
++		if( Msg.message == WM_QUIT )
++			GIsRequestingExit = 1;
++
++		guard(TranslateMessage);
++		TranslateMessage( &Msg );
++		unguardf(( TEXT("%08X %i"), (INT)((PTRINT)Msg.hwnd), Msg.message ));
++
++		guard(DispatchMessage);
++		DispatchMessageX( &Msg );
++		unguardf(( TEXT("%08X %i"), (INT)((PTRINT)Msg.hwnd), Msg.message ));
++	}
++	unguard;
++}
++
+ UBOOL UWindowsRawInputHandler::HandleWindowMessage(UINT iMessage, WPARAM wParam, LPARAM lParam)
+ {
+ 	guard(UWindowsRawInputHandler::HandleWindowMessage);
+diff --git a/WinDrv/Src/WinRawInputBuffer.cpp b/WinDrv/Src/WinRawInputBuffer.cpp
+index e4cb7e2..502904f 100644
+--- a/WinDrv/Src/WinRawInputBuffer.cpp
++++ b/WinDrv/Src/WinRawInputBuffer.cpp
+@@ -23,11 +23,6 @@ UWindowsInputHandler* UWindowsRawInputBuffer::NewHandler(const FName Name)
+ 	unguard;
+ }
+ 
+-UBOOL UWindowsRawInputBuffer::SuppressRawMessages()
+-{
+-	return true;
+-}
+-
+ void UWindowsRawInputBufferHandler::UpdateInput(FLOAT DeltaSeconds)
+ {
+ 	guard(UWindowsRawInputBufferHandler::UpdateInput);
+diff --git a/WinDrv/Src/WinViewport.cpp b/WinDrv/Src/WinViewport.cpp
+index 8a2ca2a..715ebc6 100644
+--- a/WinDrv/Src/WinViewport.cpp
++++ b/WinDrv/Src/WinViewport.cpp
+@@ -946,9 +946,6 @@ void UWindowsViewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
+ 		SetKeyboardState(KeyStates);
+ 	}
+ 
+-	// Drain input messages from the message queue
+-	PumpInputMessages();
+-
+ 	InputHandler->UpdateInput(DeltaSeconds);
+ 
+ 	ProcessedInput[IK_LeftMouse]	= 1;
+@@ -984,40 +981,6 @@ void UWindowsViewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
+ 	unguard;
+ }
+ 
+-void UWindowsViewport::PumpInputMessages()
+-{
+-	guard(UWindowsViewport::PumpInputMessages);
+-	MSG Msg;
+-
+-	for (;;)
+-	{
+-		if ( InputHandler->SuppressRawMessages() )
+-		{
+-			if (!PeekMessageX(&Msg, NULL, 0, WM_INPUT-1, PM_REMOVE | PM_QS_INPUT)
+-				&& !PeekMessageX(&Msg, NULL, WM_INPUT+1, (UINT)-1, PM_REMOVE | PM_QS_INPUT))
+-			{
+-				break;
+-			}
+-		}
+-		else if (!PeekMessageX(&Msg, NULL, 0, 0, PM_REMOVE | PM_QS_INPUT))
+-		{
+-			break;
+-		}
+-
+-		if(Msg.message == WM_QUIT)
+-			GIsRequestingExit = 1;
+-
+-		guard(TranslateMessage);
+-		TranslateMessage(&Msg);
+-		unguardf((TEXT("%08X %i"), (INT)((PTRINT)Msg.hwnd), Msg.message));
+-
+-		guard(DispatchMessage);
+-		DispatchMessageX(&Msg);
+-		unguardf((TEXT("%08X %i"), (INT)((PTRINT)Msg.hwnd), Msg.message));
+-	}
+-	unguard;
+-}
+-
+ void UWindowsViewport::UpdateMousePosition()
+ {
+ 	guard(UWindowsViewport::UpdateMousePosition);
+-- 
+2.31.1.windows.1
+
