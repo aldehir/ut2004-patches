@@ -1,0 +1,214 @@
+From 9c031f97cf829098dad94740431249f0c25e28fb Mon Sep 17 00:00:00 2001
+From: Alde Rojas <hello@alde.dev>
+Date: Sat, 7 Oct 2023 05:12:04 -0500
+Subject: [PATCH] Add a workaround for a bug in dodge detection
+
+The dodge detection in PlayerInput.uc has a bug: if you hold a
+directional key, double tap the opposing key, then releasing the initial
+key and pressing again triggers a dodge. This is seen in the stock
+UT2004 and even after the dodge timer has since expired.
+
+This change remedies that by keeping track of your initial direction and
+when your speed is zero from pressing an opposing directional key, it
+sets your speed to a very small negative or positive number (effectively
+zero) to avoid triggering an edge event.
+---
+ Engine/Inc/UnIn.h   | 33 +++++++++++++++
+ Engine/Src/UnIn.cpp | 98 ++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 130 insertions(+), 1 deletion(-)
+
+diff --git a/Engine/Inc/UnIn.h b/Engine/Inc/UnIn.h
+index 5f50c86..af0a0eb 100644
+--- a/Engine/Inc/UnIn.h
++++ b/Engine/Inc/UnIn.h
+@@ -44,6 +44,36 @@ struct FAlias
+ #pragma pack(pop)
+ #endif
+ 
++#define AXISSTATE_NONE 0x00
++#define AXISSTATE_PLUS 0x01
++#define AXISSTATE_MINUS 0x02
++#define AXISSTATE_PLUSMINUS 0x03
++
++//
++// Axis state machine to workaround a bug in the dodge detection algorithm.
++//
++struct FAxisStateMachine
++{
++	FName Name;
++	FLOAT* Axis;
++	BYTE State;
++	BYTE OldState;
++
++	FAxisStateMachine(FName InName, BYTE InState, FLOAT* InAxis)
++	: Name(InName), Axis(InAxis), State(InState), OldState(AXISSTATE_NONE)
++	{}
++
++	void Feed(FLOAT value) {
++		if (value > 0.0f)
++			State |= AXISSTATE_PLUS;
++		else if (value < 0.0f)
++			State |= AXISSTATE_MINUS;
++	}
++
++	void Reset();
++	void Transition();
++};
++
+ //
+ // The input system base class.
+ //
+@@ -101,6 +131,9 @@ protected:
+ 	virtual FLOAT* FindAxisName( AActor* Actor, const TCHAR* ButtonName ) const;
+ 	virtual void ExecInputCommands( const TCHAR* Cmd, FOutputDevice& Ar );
+ 	static const TCHAR* StaticConfigName() {return TEXT("User");}
++
++	TArray<FAxisStateMachine> Axes;
++	virtual FAxisStateMachine& GetAxisStateMachine(const TCHAR* ButtonName);
+ };
+ 
+ #include "UnForcePacking_end.h"
+diff --git a/Engine/Src/UnIn.cpp b/Engine/Src/UnIn.cpp
+index 3c80ebe..82b1fc0 100644
+--- a/Engine/Src/UnIn.cpp
++++ b/Engine/Src/UnIn.cpp
+@@ -38,6 +38,70 @@ public:
+ 	}
+ };
+ 
++void FAxisStateMachine::Reset()
++{
++	State = AXISSTATE_NONE;
++}
++
++void FAxisStateMachine::Transition()
++{
++	guard(FAxisStateMachine::Transition);
++	if (Axis == NULL)
++		return;
++
++	// Determine state and speed depending on the last state. This is to ensure
++	// that the dodge detection code in PlayerInput.uc properly triggers on
++	// actual edge events and not errorneous events caused by pressing an
++	// opposing key.
++	switch (OldState)
++	{
++	case AXISSTATE_NONE:
++		switch (State)
++		{
++		case AXISSTATE_NONE:
++		case AXISSTATE_PLUSMINUS:
++			*Axis = 0.0;
++			return;
++		default:
++			OldState = State;
++			return;
++		}
++	case AXISSTATE_PLUS:
++		switch (State)
++		{
++		case AXISSTATE_NONE:
++			*Axis = 0.0;
++		case AXISSTATE_MINUS:
++		case AXISSTATE_PLUS:
++			OldState = State;
++			return;
++		case AXISSTATE_PLUSMINUS:
++			// When the opposing key is pressed, keep a very small positive
++			// direction to avoid triggering an edge event in the dodge
++			// detection.
++			*Axis = (FLOAT)+0.000001;
++			return;
++		}
++	case AXISSTATE_MINUS:
++		switch (State)
++		{
++		case AXISSTATE_NONE:
++			*Axis = 0.0;
++		case AXISSTATE_MINUS:
++		case AXISSTATE_PLUS:
++			OldState = State;
++			return;
++		case AXISSTATE_PLUSMINUS:
++			// When the opposing key is pressed, keep a very small negative
++			// direction to avoid triggering an edge event in the dodge
++			// detection.
++			*Axis = (FLOAT)-0.000001;
++			return;
++		}
++	}
++	unguard;
++}
++
+ /*-----------------------------------------------------------------------------
+ 	Implementation.
+ -----------------------------------------------------------------------------*/
+@@ -174,6 +238,26 @@ FLOAT* UInput::FindAxisName( AActor* Actor, const TCHAR* ButtonName ) const
+ 	unguard;
+ }
+ 
++FAxisStateMachine& UInput::GetAxisStateMachine(const TCHAR* ButtonName)
++{
++	guard(UInput::GetAxisStateMachine);
++	FName Name = FName(ButtonName, FNAME_Find);
++
++	INT i;
++	for (i = 0; i < Axes.Num(); i++)
++		if (Axes(i).Name == Name)
++			break;
++
++	if (i == Axes.Num())
++	{
++		FLOAT* Axis = FindAxisName(Viewport->Actor, ButtonName);
++		i = Axes.AddItem(FAxisStateMachine(Name, AXISSTATE_NONE, Axis));
++	}
++
++	return Axes(i);
++	unguard;
++}
++
+ //
+ // Execute input commands.
+ //
+@@ -382,6 +466,7 @@ UBOOL UInput::Exec( const TCHAR* Str, FOutputDevice& Ar )
+ 				else if( GetInputAction() == IST_Hold )
+ 				{
+ 					*Axis += GetInputDelta() * Speed * Invert;
++					GetAxisStateMachine(Temp).Feed(Speed * Invert);
+ 				}
+ 			}
+ 		}
+@@ -679,11 +764,17 @@ void UInput::ReadInput( FLOAT DeltaSeconds, FOutputDevice& Ar )
+ 		FMemCache::FCacheItem*     Item  = NULL;
+ 		FInputVarCache* Cache = FInputVarCache::Get( Viewport->Actor->GetClass(), Item );
+ 
+-		// Update everything with IST_Hold.
+ 		if( DeltaSeconds!=-1.f )
++		{
++			// Reset axes states
++			for (INT i = 0; i < Axes.Num(); i++)
++				Axes(i).Reset();
++
++			// Update everything with IST_Hold.
+ 			for( INT i=0; i<IK_MAX; i++ )
+ 				if( KeyDownTable[i] )
+ 					Process( *GLog, (EInputKey)i, IST_Hold, DeltaSeconds );
++		}
+ 
+ 		// Scale the axes.
+ // amb ---
+@@ -698,6 +789,11 @@ void UInput::ReadInput( FLOAT DeltaSeconds, FOutputDevice& Ar )
+ 			if( Cast<UFloatProperty>(Cache->Properties[i]) )
+ 				*(FLOAT*)((BYTE*)Viewport->Actor + Cache->Properties[i]->Offset) *= Scale;
+ 
++		// Adjust axes for dodge detection code
++		if ( DeltaSeconds!=-1.f )
++			for (INT i = 0; i < Axes.Num(); i++)
++				Axes(i).Transition();
++
+ 		Item->Unlock();
+ 	}
+ 
+-- 
+2.31.1.windows.1
+
