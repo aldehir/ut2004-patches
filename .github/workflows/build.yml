@@ -1,7 +1,21 @@
 name: Build
 on: push
+
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   Build:
     runs-on: windows-latest
     steps:
-      - run: Get-Item ./*
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::808766853717:role/GitHubActions
+          aws-region: us-east-2
+
+      - name: Download source
+        run: aws cp $env:SOURCE_ARCHIVE ./source.zip
+        env:
+          SOURCE_ARCHIVE: ${{ secrets.SOURCE_ARCHIVE }}
