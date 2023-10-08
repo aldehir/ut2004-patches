@@ -47,11 +47,9 @@ jobs:
           git config --global user.email "actions@alde.dev"
           git init
           git add .
-          git commit -m 'Initial commit'
-          git am $env:PATCH_DIR\*.patch
+          git commit -q -m 'Initial commit'
+          git am ..\patches\*.patch
         working-directory: source
-        env:
-          PATCH_DIR: ${{ github.workspace }}\patches
 
       - name: Run build
         run: |
