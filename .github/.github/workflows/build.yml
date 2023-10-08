@@ -1,0 +1,6 @@
+name: Build
+on: push
+jobs:
+  runs-on: windows-latest
+  steps:
+    - run: Get-Item ./*
