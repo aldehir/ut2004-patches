@@ -18,6 +18,6 @@ jobs:
           aws-region: us-east-2
 
       - name: Download source
-        run: aws cp $env:SOURCE_ARCHIVE ./source.zip
+        run: aws s3 cp $env:SOURCE_ARCHIVE ./source.zip
         env:
           SOURCE_ARCHIVE: ${{ secrets.SOURCE_ARCHIVE }}
