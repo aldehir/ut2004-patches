@@ -11,6 +11,11 @@ jobs:
   Build:
     runs-on: windows-latest
     steps:
+      - name: Checkout patches repo
+        uses: actions/checkout@v4
+        with:
+          path: ut2004-patches
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -18,6 +23,21 @@ jobs:
           aws-region: us-east-2
 
       - name: Download source
-        run: aws s3 cp $env:SOURCE_ARCHIVE ./source.zip
+        run: aws s3 cp $env:SOURCE_ARCHIVE .\source.zip
         env:
           SOURCE_ARCHIVE: ${{ secrets.SOURCE_ARCHIVE }}
+
+      - name: Extract source
+        run: Expand-Archive -Path .\source.zip
+
+      - name: Copy gitignore to source
+        run: Copy-Item ut2004-patches\gitignore ut2004_3369\.gitignore
+
+      - name: Apply patches
+        run: |
+          git add .
+          git commit -m 'Initial directory'
+          git am $env:PATCH_DIRECTORY\*.patch
+        working-directory: ut2004_3369
+        env:
+          PATCH_DIRECTORY: ${{ github.workspace }}/ut2004-patches
