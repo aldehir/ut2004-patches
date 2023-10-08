@@ -14,7 +14,7 @@ jobs:
       - name: Checkout patches repo
         uses: actions/checkout@v4
         with:
-          path: ut2004-patches
+          path: patches
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -31,13 +31,13 @@ jobs:
         run: Expand-Archive -Path .\source.zip
 
       - name: Copy gitignore to source
-        run: Copy-Item ut2004-patches\gitignore ut2004_3369\.gitignore
+        run: Copy-Item patches\gitignore source\.gitignore
 
       - name: Apply patches
         run: |
           git add .
           git commit -m 'Initial directory'
           git am $env:PATCH_DIRECTORY\*.patch
-        working-directory: ut2004_3369
+        working-directory: source
         env:
-          PATCH_DIRECTORY: ${{ github.workspace }}/ut2004-patches
+          PATCH_DIRECTORY: ${{ github.workspace }}/patches
