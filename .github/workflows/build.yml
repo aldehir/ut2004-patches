@@ -23,14 +23,14 @@ jobs:
           aws-region: us-east-2
 
       - name: Download source
-        run: aws s3 cp $env:SOURCE .\source.zip
         env:
           SOURCE: ${{ secrets.SOURCE_ARCHIVE }}
+        run: aws s3 cp $env:SOURCE .\source.zip
 
       - name: Download build toolkit
-        run: aws s3 cp $env:SOURCE .\toolkit.zip
         env:
           SOURCE: ${{ secrets.TOOLKIT_ARCHIVE }}
+        run: aws s3 cp $env:SOURCE .\toolkit.zip
 
       - name: Extract source
         run: Expand-Archive -Path .\source.zip
@@ -42,23 +42,15 @@ jobs:
         run: Copy-Item patches\gitignore source\.gitignore
 
       - name: Apply patches
+        working-directory: source
         run: |
           Get-Content ..\patches\*.patch | & 'C:\Program Files\Git\usr\bin\patch.exe' -p1
-        #run: |
-        #  git config --global user.name "actions"
-        #  git config --global user.email "actions@alde.dev"
-        #  git init
-        #  git add .
-        #  git commit -q -m 'Initial commit'
-        #  git am ..\patches\*.patch
-        working-directory: source
 
       - name: Run build
+        env:
+          PREFIX: ${{ github.workspace }}\source
+        working-directory: source
         run: |
-          . $env:TOOLKIT\UT2BuildToolkit\activate.ps1
+          . ..\toolkit\UT2BuildToolkit\activate.ps1
           meson setup build/release -Db_vscrt=none --buildtype release --prefix $env:PREFIX
           ninja -C build/release
-        working-directory: source
-        env:
-          TOOLKIT: ${{ github.workspace }}\toolkit
-          PREFIX: ${{ github.workspace }}\source
