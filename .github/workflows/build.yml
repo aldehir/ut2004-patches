@@ -43,12 +43,14 @@ jobs:
 
       - name: Apply patches
         run: |
-          git config --global user.name "actions"
-          git config --global user.email "actions@alde.dev"
-          git init
-          git add .
-          git commit -q -m 'Initial commit'
-          git am ..\patches\*.patch
+          Get-Content ..\patches\*.patch | & 'C:\Program Files\Git\usr\bin\patch.exe' -p1
+        #run: |
+        #  git config --global user.name "actions"
+        #  git config --global user.email "actions@alde.dev"
+        #  git init
+        #  git add .
+        #  git commit -q -m 'Initial commit'
+        #  git am ..\patches\*.patch
         working-directory: source
 
       - name: Run build
