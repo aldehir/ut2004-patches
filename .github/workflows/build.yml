@@ -43,7 +43,12 @@ jobs:
 
       - name: Apply patches
         run: |
-          & 'C:\Program Files\Git\usr\bin\patch.exe' -p1 $env:PATCH_DIR\*.patch
+          git config --global user.name "actions"
+          git config --global user.email "actions@alde.dev"
+          git init
+          git add .
+          git commit -m 'Initial commit'
+          git am $env:PATCH_DIR\*.patch
         working-directory: source
         env:
           PATCH_DIR: ${{ github.workspace }}\patches
