@@ -45,7 +45,7 @@ jobs:
         run: |
           git init
           git add .
-          git commit -m 'Initial directory'
+          git commit -m 'Initial directory' --author "actions <actions@alde.dev>"
           git am $env:PATCH_DIRECTORY\*.patch
         working-directory: source
         env:
