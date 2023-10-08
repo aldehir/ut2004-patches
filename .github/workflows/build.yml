@@ -46,4 +46,14 @@ jobs:
           & 'C:\Program Files\Git\usr\bin\patch.exe' -p1 $env:PATCH_DIR\*.patch
         working-directory: source
         env:
-          PATCH_DIR: ${{ github.workspace }}/patches
+          PATCH_DIR: ${{ github.workspace }}\patches
+
+      - name: Run build
+        run: |
+          . $env:TOOLKIT/activate.ps1
+          meson setup build/release -Db_vscrt=none --buildtype release --prefix $env:PREFIX
+          ninja -C build/release
+        working-directory: source
+        env:
+          TOOLKIT: ${{ github.workspace }}\toolkit
+          PREFIX: ${{ github.workspace }}\source
