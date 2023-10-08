@@ -23,18 +23,27 @@ jobs:
           aws-region: us-east-2
 
       - name: Download source
-        run: aws s3 cp $env:SOURCE_ARCHIVE .\source.zip
+        run: aws s3 cp $env:SOURCE .\source.zip
         env:
-          SOURCE_ARCHIVE: ${{ secrets.SOURCE_ARCHIVE }}
+          SOURCE: ${{ secrets.SOURCE_ARCHIVE }}
+
+      - name: Download build toolkit
+        run: aws s3 cp $env:SOURCE .\toolkit.zip
+        env:
+          SOURCE: ${{ secrets.TOOLKIT_ARCHIVE }}
 
       - name: Extract source
         run: Expand-Archive -Path .\source.zip
+
+      - name: Extract toolkit
+        run: Expand-Archive -Path .\toolkit.zip
 
       - name: Copy gitignore to source
         run: Copy-Item patches\gitignore source\.gitignore
 
       - name: Apply patches
         run: |
+          git init
           git add .
           git commit -m 'Initial directory'
           git am $env:PATCH_DIRECTORY\*.patch
