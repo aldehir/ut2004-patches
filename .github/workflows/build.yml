@@ -25,21 +25,16 @@ jobs:
       - name: Download source
         env:
           SOURCE: ${{ secrets.SOURCE_ARCHIVE }}
-        run: aws s3 cp $env:SOURCE .\source.zip
+        run: |
+          aws s3 cp $env:SOURCE .\source.zip
+          Expand-Archive -Path .\source.zip
 
       - name: Download build toolkit
         env:
           SOURCE: ${{ secrets.TOOLKIT_ARCHIVE }}
-        run: aws s3 cp $env:SOURCE .\toolkit.zip
-
-      - name: Extract source
-        run: Expand-Archive -Path .\source.zip
-
-      - name: Extract toolkit
-        run: Expand-Archive -Path .\toolkit.zip
-
-      - name: Copy gitignore to source
-        run: Copy-Item patches\gitignore source\.gitignore
+        run: |
+          aws s3 cp $env:SOURCE .\toolkit.zip
+          Expand-Archive -Path .\toolkit.zip
 
       - name: Apply patches
         working-directory: source
