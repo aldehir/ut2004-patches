@@ -5,7 +5,10 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
+
+env:
+  OUTPUT_ARCHIVE: ut2004-patch-${{ github.ref_name }}.zip
 
 jobs:
   build-windows:
@@ -54,4 +57,11 @@ jobs:
 
       - name: Create release package
         working-directory: source
-        run: ..\patches\scripts\windows\CreatePackage.ps1
+        run: ..\patches\scripts\windows\CreatePackage.ps1 ..\$env:OUTPUT_ARCHIVE
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: |
+            ${{ env.OUTPUT_ARCHIVE }}

@@ -1,3 +1,4 @@
+$output = $args[0]
 $files = @(`
   "System\Core.dll", `
   "System\Engine.dll", `
@@ -7,6 +8,6 @@ $files = @(`
   "System\UT2004.exe" `
 )
 
-$args = @("a", "-tzip", "..\release.zip") + $files
+$args = @("a", "-tzip", $output) + $files
 
 Start-Process 7z.exe $args -NoNewWindow -Wait
