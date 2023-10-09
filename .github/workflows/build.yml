@@ -8,7 +8,8 @@ permissions:
   contents: read
 
 jobs:
-  Build Windows:
+  build-windows:
+    name: Build Windows
     runs-on: windows-latest
     steps:
       - name: Checkout patches repo
