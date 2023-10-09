@@ -1,0 +1,69 @@
+name: Build
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  OUTPUT_ARCHIVE: ut2004-patch-${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || github.sha }}.zip
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout patches repo
+        uses: actions/checkout@v4
+        with:
+          path: patches
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::808766853717:role/GitHubActions
+          aws-region: us-east-2
+
+      - name: Download source
+        env:
+          SOURCE: ${{ secrets.SOURCE_ARCHIVE }}
+        run: |
+          aws s3 cp $env:SOURCE .\source.zip
+          Expand-Archive -Path .\source.zip
+
+      - name: Download build toolkit
+        env:
+          SOURCE: ${{ secrets.TOOLKIT_ARCHIVE }}
+        run: |
+          aws s3 cp $env:SOURCE .\toolkit.zip
+          Expand-Archive -Path .\toolkit.zip
+
+      - name: Apply patches
+        working-directory: source
+        run: |
+          Get-Content ..\patches\*.patch | & 'C:\Program Files\Git\usr\bin\patch.exe' -p1
+
+      - name: Run build
+        env:
+          PREFIX: ${{ github.workspace }}\source
+        working-directory: source
+        run: |
+          . ..\toolkit\UT2BuildToolkit\activate.ps1
+          meson setup build/release -Db_vscrt=none --buildtype release --prefix $env:PREFIX
+          ninja -C build/release
+          ninja -C build/release install
+
+      - name: Create release package
+        working-directory: source
+        run: ..\patches\scripts\windows\CreatePackage.ps1 ..\$env:OUTPUT_ARCHIVE
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: UT2004 Patch ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            ${{ env.OUTPUT_ARCHIVE }}
