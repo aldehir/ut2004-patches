@@ -1,0 +1,182 @@
+From 2931148d23574753725c5d0142578a2bb01cfbb2 Mon Sep 17 00:00:00 2001
+From: Alde Rojas <hello@alde.dev>
+Date: Sun, 15 Oct 2023 21:52:15 -0500
+Subject: [PATCH] Fix bugs found in the D3D9 driver
+
+Addresses the following issues in the d3d9 driver:
+
+* Window hangs when switching from fullscreen to windowed mode.
+* Multi-pass material blending not working as expected.
+---
+ D3D9Drv/Src/D3D9RenderDevice.cpp    | 37 +++++++++++++----------------
+ D3D9Drv/Src/D3D9RenderInterface.cpp |  5 +++-
+ D3D9Drv/Src/D3D9RenderInterface.h   |  2 +-
+ D3D9Drv/Src/D3D9RenderState.cpp     |  4 ++--
+ D3D9Drv/Src/D3D9Resource.cpp        |  2 +-
+ D3D9Drv/meson.build                 |  7 +++---
+ 6 files changed, 28 insertions(+), 29 deletions(-)
+
+diff --git a/D3D9Drv/Src/D3D9RenderDevice.cpp b/D3D9Drv/Src/D3D9RenderDevice.cpp
+index d656914..8035b25 100644
+--- a/D3D9Drv/Src/D3D9RenderDevice.cpp
++++ b/D3D9Drv/Src/D3D9RenderDevice.cpp
+@@ -594,6 +594,14 @@ void UD3D9RenderDevice::Exit(UViewport* Viewport)
+ 	unguard;
+ }
+ 
++static const D3DFORMAT Formats[] = {
++	D3DFMT_A8R8G8B8,
++	D3DFMT_X8R8G8B8,
++	D3DFMT_R5G6B5,
++	D3DFMT_X1R5G5B5,
++	D3DFMT_A1R5G5B5,
++};
++
+ //
+ //	UD3D9RenderDevice::SetRes
+ //
+@@ -654,27 +662,14 @@ UBOOL UD3D9RenderDevice::SetRes(UViewport* Viewport,INT NewX,INT NewY,UBOOL Full
+ 		// Enumerate device display modes.
+ 		guard(EnumDisplayModes);
+ 
+-		DisplayModes.Empty( Direct3D9->GetAdapterModeCount(BestAdapter, D3DFMT_X8R8G8B8) + 
+-			                Direct3D9->GetAdapterModeCount(BestAdapter, D3DFMT_R5G6B5) );
+-
+-		//32-bit modes
+-		for(DWORD Index = 0;Index < Direct3D9->GetAdapterModeCount(BestAdapter, D3DFMT_X8R8G8B8);Index++)
+-		{
+-			D3DDISPLAYMODE	DisplayMode;
+-
+-			Direct3D9->EnumAdapterModes(BestAdapter, D3DFMT_X8R8G8B8, Index,&DisplayMode);
+-
+-			DisplayModes.AddItem(DisplayMode);
+-		}
+-
+-		//16-bit modes
+-		for(DWORD Index = 0;Index < Direct3D9->GetAdapterModeCount(BestAdapter, D3DFMT_R5G6B5);Index++)
++		for (INT i = 0; i < sizeof(Formats) / sizeof(D3DFORMAT); i++)
+ 		{
+-			D3DDISPLAYMODE	DisplayMode;
+-
+-			Direct3D9->EnumAdapterModes(BestAdapter, D3DFMT_R5G6B5, Index, &DisplayMode);
+-
+-			DisplayModes.AddItem(DisplayMode);
++			for(DWORD Index = 0; Index < Direct3D9->GetAdapterModeCount(BestAdapter, Formats[i]); Index++)
++			{
++				D3DDISPLAYMODE	DisplayMode;
++				Direct3D9->EnumAdapterModes(BestAdapter, Formats[i], Index, &DisplayMode);
++				DisplayModes.AddItem(DisplayMode);
++			}
+ 		}
+ 
+ 		unguard;
+@@ -859,7 +854,7 @@ UBOOL UD3D9RenderDevice::SetRes(UViewport* Viewport,INT NewX,INT NewY,UBOOL Full
+ 
+ 			// Recreate for the game and use Reset for the Editor.
+ 			//if( !GIsEditor || (GIsEditor && FAILED(Direct3DDevice9->Reset(&PresentParms))) )
+-			//if( FAILED(Direct3DDevice9->Reset(&PresentParms)) )			
++			if( FAILED(Direct3DDevice9->Reset(&PresentParms)) )
+ 			{
+ 				Direct3DDevice9->Release();
+ 				Direct3DDevice9 = NULL;
+diff --git a/D3D9Drv/Src/D3D9RenderInterface.cpp b/D3D9Drv/Src/D3D9RenderInterface.cpp
+index 08299c9..f81b043 100644
+--- a/D3D9Drv/Src/D3D9RenderInterface.cpp
++++ b/D3D9Drv/Src/D3D9RenderInterface.cpp
+@@ -1653,12 +1653,15 @@ INT FD3D9RenderInterface::SetDynamicIndexBuffer(FIndexBuffer* IndexBuffer,INT Ba
+ //
+ //	FD3D9RenderInterface::DrawPrimitive
+ //
+-void FD3D9RenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT FirstIndex,INT NumPrimitives,INT MinIndex,INT MaxIndex)
++void FD3D9RenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT RealFirstIndex,INT RealNumPrimitives,INT MinIndex,INT MaxIndex)
+ {
+ 	guard(FD3D9RenderInterface::DrawPrimitive);
+ 
+ 	for( INT pass=0;pass<CurrentState->NumMaterialPasses;pass++ )
+ 	{
++		INT NumPrimitives = RealNumPrimitives;
++		INT FirstIndex = RealFirstIndex;
++
+ 		SetMaterialBlending( CurrentState->MaterialPasses[pass], CurrentState->CullMode );
+ 
+ 		// Fog hacks needed for translucent objects.
+diff --git a/D3D9Drv/Src/D3D9RenderInterface.h b/D3D9Drv/Src/D3D9RenderInterface.h
+index 68066eb..2a05128 100644
+--- a/D3D9Drv/Src/D3D9RenderInterface.h
++++ b/D3D9Drv/Src/D3D9RenderInterface.h
+@@ -284,7 +284,7 @@ public:
+ 	virtual INT  SetIndexBuffer(FIndexBuffer* IndexBuffer,INT BaseVertexIndex);
+ 	virtual INT  SetDynamicIndexBuffer(FIndexBuffer* IndexBuffer,INT BaseVertexIndex);
+ 
+-	virtual void DrawPrimitive(EPrimitiveType PrimitiveType,INT FirstIndex,INT NumPrimitives,INT MinIndex,INT MaxIndex);
++	virtual void DrawPrimitive(EPrimitiveType PrimitiveType,INT RealFirstIndex,INT RealNumPrimitives,INT MinIndex,INT MaxIndex);
+ 
+ 	// Helper function.
+ 	virtual D3DSTENCILOP GetD3DStencilOp( EStencilOp StencilOp );
+diff --git a/D3D9Drv/Src/D3D9RenderState.cpp b/D3D9Drv/Src/D3D9RenderState.cpp
+index 5b980b2..19d2a74 100644
+--- a/D3D9Drv/Src/D3D9RenderState.cpp
++++ b/D3D9Drv/Src/D3D9RenderState.cpp
+@@ -136,8 +136,8 @@ void FD3D9DeferredState::Init( UD3D9RenderDevice*	InRenDev )
+ 	HardwareState.VertexShader = NULL;
+ 	HardwareState.PixelShader = NULL;
+ 	HardwareState.Decl = NULL;
+-	RenDev->Direct3DDevice9->SetFVF(D3DFVF_XYZ);
+ 	RenDev->Direct3DDevice9->SetVertexShader( HardwareState.VertexShader );
++	RenDev->Direct3DDevice9->SetFVF(D3DFVF_XYZ);
+ 
+ 	for( INT StreamIndex = 0; StreamIndex < Min<INT>(16,RenDev->DeviceCaps9.MaxStreams); StreamIndex++ )
+ 	{
+@@ -397,8 +397,8 @@ void FD3D9DeferredState::DeleteVertexShader( IDirect3DVertexShader9* Shader )
+ 	{
+ 		HardwareState.VertexShader	= NULL;
+ 		HardwareState.Decl			= NULL;
+-		RenDev->Direct3DDevice9->SetFVF( D3DFVF_XYZ );
+ 		RenDev->Direct3DDevice9->SetVertexShader( HardwareState.VertexShader );
++		RenDev->Direct3DDevice9->SetFVF( D3DFVF_XYZ );
+ 	}
+ 	SAFE_RELEASE( Shader );
+ }
+diff --git a/D3D9Drv/Src/D3D9Resource.cpp b/D3D9Drv/Src/D3D9Resource.cpp
+index d14faba..9bb5319 100644
+--- a/D3D9Drv/Src/D3D9Resource.cpp
++++ b/D3D9Drv/Src/D3D9Resource.cpp
+@@ -939,7 +939,7 @@ void FD3D9DynamicVertexStream::Reallocate(INT NewSize)
+ {
+ 	guard(FD3D9DynamicVertexStream::Reallocate);
+ 
+-	debugf(TEXT("Allocating %u byte dynamic vertex buffer."),NewSize);
++//	debugf(TEXT("Allocating %u byte dynamic vertex buffer."),NewSize);
+ 
+ 	// Release the old vertex buffer.
+ 	if(Direct3DVertexBuffer9)
+diff --git a/D3D9Drv/meson.build b/D3D9Drv/meson.build
+index eb3a798..ddfe30b 100644
+--- a/D3D9Drv/meson.build
++++ b/D3D9Drv/meson.build
+@@ -11,18 +11,19 @@ d3d9drv_lib = library('D3D9Drv',
+     '/MD',
+     '/DD3D9DRV_API=DLL_EXPORT',
+     '/DD3D9DRV_EXPORTS',
+-    '/D_WIN32_IE=0x0200',
++    '/D_WIN32_IE=0x0501',
++    '/D_WIN32_WINNT=0x0501',
+     '/DWITH_LIPSINC',
+   ],
+   link_args: [
+     '/NODEFAULTLIB:LIBCI',
+   ],
+-  dependencies: [engine, dx9, metoolkit],
++  dependencies: [dx9, engine, metoolkit],
+   install: true,
+   install_dir: 'System',
+ )
+ 
+ d3d9drv = declare_dependency(
+   link_with: d3d9drv_lib,
+-  dependencies: [engine, dx9, metoolkit],
++  dependencies: [dx9, engine, metoolkit],
+ )
+-- 
+2.31.1.windows.1
+
