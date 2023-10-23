@@ -1,4 +1,4 @@
-From d89c236886206bebdad9af6e4523b3a519948379 Mon Sep 17 00:00:00 2001
+From 6fb35eaf1b600373f9ae047b2d2e46bcfc4d1c7e Mon Sep 17 00:00:00 2001
 From: Alde Rojas <hello@alde.dev>
 Date: Sat, 7 Oct 2023 05:12:04 -0500
 Subject: [PATCH] Add a workaround for a bug in dodge detection

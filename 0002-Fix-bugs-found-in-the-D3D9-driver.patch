@@ -1,4 +1,4 @@
-From 2931148d23574753725c5d0142578a2bb01cfbb2 Mon Sep 17 00:00:00 2001
+From 9e1d4b36533ad9237b331697b5f947d50c2f2e6e Mon Sep 17 00:00:00 2001
 From: Alde Rojas <hello@alde.dev>
 Date: Sun, 15 Oct 2023 21:52:15 -0500
 Subject: [PATCH] Fix bugs found in the D3D9 driver

@@ -1,4 +1,4 @@
-From 5f612ad25399939de4a32f07001f919beb01f7c4 Mon Sep 17 00:00:00 2001
+From aaf3f01d658a25ea7611006dc436bbda3ec2cda5 Mon Sep 17 00:00:00 2001
 From: Alde Rojas <hello@alde.dev>
 Date: Fri, 6 Oct 2023 21:27:56 -0500
 Subject: [PATCH] Increase refresh rate for OpenGL up to 600

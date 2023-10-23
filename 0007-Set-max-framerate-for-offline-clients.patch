@@ -1,4 +1,4 @@
-From 216020b6ef5719fe8e6f4879d27f954e27ed5cfa Mon Sep 17 00:00:00 2001
+From 697f8f61e8e99594172b0bae4f7e397836218021 Mon Sep 17 00:00:00 2001
 From: Alde Rojas <hello@alde.dev>
 Date: Wed, 27 Sep 2023 19:42:32 -0500
 Subject: [PATCH] Set max framerate for offline clients
@@ -25,5 +25,5 @@ index ae74f08..e42f016 100644
  		return 0;
  	unguard;
 -- 
-2.42.0.windows.2
+2.31.1.windows.1
 

@@ -1,62 +1,62 @@
-From 72a2f76dafc284a183938a9d6a48a52cd6ef2eef Mon Sep 17 00:00:00 2001
+From b75595f754ce18fa090598d3005ff362aa66b145 Mon Sep 17 00:00:00 2001
 From: Aldehir Rojas <hello@aldehir.com>
 Date: Sun, 1 Oct 2023 06:47:04 -0500
 Subject: [PATCH] Fix compiler errors for newer versions of MSVC
 
 Fix errors and add a few guards in an attempt to support MSVC 2013.
 ---
- Core/Inc/UnObjBas.h                      |   4 +-
- Core/Inc/UnVcWin32.h                     |   3 +-
- Engine/Src/UnModelLight.cpp              |   4 +-
- Engine/Src/UnTex.cpp                     |   6 +-
- Engine/Src/xForceFeedback.cpp            |   4 ++
- Setup/Src/Setup.cpp                      |  24 ++++----
- Setup/Src/USetupDefinition.cpp           |  12 ++--
- Setup/Src/USetupDefinitionWindows.cpp    |   4 +-
- Speech/Inc/sphelper.h                    |   4 +-
- UnrealEd/Inc/BottomBarStandard.h         |  10 ++--
- UnrealEd/Inc/BrowserActor.h              |  16 ++---
- UnrealEd/Inc/BrowserGroup.h              |   4 +-
- UnrealEd/Inc/BrowserMaster.h             |   2 +-
- UnrealEd/Inc/BrowserMesh.h               |  10 ++--
- UnrealEd/Inc/BrowserMusic.h              |  10 ++--
- UnrealEd/Inc/BrowserPrefab.h             |  20 +++----
- UnrealEd/Inc/BrowserSound.h              |  24 ++++----
- UnrealEd/Inc/BrowserStaticMesh.h         |  18 +++---
- UnrealEd/Inc/BrowserTexture.h            |  24 ++++----
- UnrealEd/Inc/ButtonBar.h                 |   4 +-
- UnrealEd/Inc/CodeFrame.h                 |  14 ++---
- UnrealEd/Inc/DlgAddSpecial.h             |   6 +-
- UnrealEd/Inc/DlgBrushBuilder.h           |   4 +-
- UnrealEd/Inc/DlgBrushImport.h            |   4 +-
- UnrealEd/Inc/DlgDepth.h                  |   4 +-
- UnrealEd/Inc/DlgGeneric.h                |   4 +-
- UnrealEd/Inc/DlgLoadErrors.h             |   2 +-
- UnrealEd/Inc/DlgMapCheck.h               |   6 +-
- UnrealEd/Inc/DlgMapImport.h              |   4 +-
- UnrealEd/Inc/DlgNewMaterial.h            |   6 +-
- UnrealEd/Inc/DlgRename.h                 |   4 +-
- UnrealEd/Inc/DlgScaleLights.h            |   4 +-
- UnrealEd/Inc/DlgSearchActors.h           |  10 ++--
- UnrealEd/Inc/DlgTexReplace.h             |   8 +--
- UnrealEd/Inc/DlgTipOfTheDay.h            |   4 +-
- UnrealEd/Inc/DlgViewportConfig.h         |   4 +-
- UnrealEd/Inc/MatineePreview.h            |  18 +++---
- UnrealEd/Inc/MatineeSheet.h              |  42 ++++++-------
- UnrealEd/Inc/ParticleEditorTools.h       |   6 +-
- UnrealEd/Inc/TerrainEditSheet.h          |  72 +++++++++++------------
- UnrealEd/Src/BrowserAnimation.cpp        |  40 ++++++-------
- UnrealEd/Src/BrowserLIPSinc.cpp          |  50 ++++++++--------
- UnrealEd/Src/BuildPropSheet.cpp          |  46 +++++++--------
- UnrealEd/Src/DlgArray.h                  |   4 +-
- UnrealEd/Src/DlgTexProp.cpp              |  16 ++---
- UnrealEd/Src/EmitterWizard.cpp           |  10 ++--
- UnrealEd/Src/ParticleEditor.cpp          |   8 +--
- UnrealEd/Src/ParticleEditorTab.cpp       |   2 +-
- UnrealEd/Src/ParticleEditorToolLabel.cpp |   2 +-
- UnrealEd/Src/ParticleEditorTools.cpp     |  68 ++++++++++-----------
- UnrealEd/Src/SurfacePropSheet.cpp        |  54 ++++++++---------
- 52 files changed, 369 insertions(+), 364 deletions(-)
+ Core/Inc/UnObjBas.h                      |  4 +-
+ Core/Inc/UnVcWin32.h                     |  3 +-
+ Engine/Src/UnModelLight.cpp              |  4 +-
+ Engine/Src/UnTex.cpp                     |  6 +-
+ Engine/Src/xForceFeedback.cpp            |  4 ++
+ Setup/Src/Setup.cpp                      | 24 ++++----
+ Setup/Src/USetupDefinition.cpp           | 12 ++--
+ Setup/Src/USetupDefinitionWindows.cpp    |  4 +-
+ Speech/Inc/sphelper.h                    |  4 +-
+ UnrealEd/Inc/BottomBarStandard.h         | 10 ++--
+ UnrealEd/Inc/BrowserActor.h              | 16 +++---
+ UnrealEd/Inc/BrowserGroup.h              |  4 +-
+ UnrealEd/Inc/BrowserMaster.h             |  2 +-
+ UnrealEd/Inc/BrowserMesh.h               | 10 ++--
+ UnrealEd/Inc/BrowserMusic.h              | 10 ++--
+ UnrealEd/Inc/BrowserPrefab.h             | 20 +++----
+ UnrealEd/Inc/BrowserSound.h              | 24 ++++----
+ UnrealEd/Inc/BrowserStaticMesh.h         | 18 +++---
+ UnrealEd/Inc/BrowserTexture.h            | 24 ++++----
+ UnrealEd/Inc/ButtonBar.h                 |  4 +-
+ UnrealEd/Inc/CodeFrame.h                 | 14 ++---
+ UnrealEd/Inc/DlgAddSpecial.h             |  6 +-
+ UnrealEd/Inc/DlgBrushBuilder.h           |  4 +-
+ UnrealEd/Inc/DlgBrushImport.h            |  4 +-
+ UnrealEd/Inc/DlgDepth.h                  |  4 +-
+ UnrealEd/Inc/DlgGeneric.h                |  4 +-
+ UnrealEd/Inc/DlgLoadErrors.h             |  2 +-
+ UnrealEd/Inc/DlgMapCheck.h               |  6 +-
+ UnrealEd/Inc/DlgMapImport.h              |  4 +-
+ UnrealEd/Inc/DlgNewMaterial.h            |  6 +-
+ UnrealEd/Inc/DlgRename.h                 |  4 +-
+ UnrealEd/Inc/DlgScaleLights.h            |  4 +-
+ UnrealEd/Inc/DlgSearchActors.h           | 10 ++--
+ UnrealEd/Inc/DlgTexReplace.h             |  8 +--
+ UnrealEd/Inc/DlgTipOfTheDay.h            |  4 +-
+ UnrealEd/Inc/DlgViewportConfig.h         |  4 +-
+ UnrealEd/Inc/MatineePreview.h            | 18 +++---
+ UnrealEd/Inc/MatineeSheet.h              | 42 +++++++-------
+ UnrealEd/Inc/ParticleEditorTools.h       |  6 +-
+ UnrealEd/Inc/TerrainEditSheet.h          | 72 ++++++++++++------------
+ UnrealEd/Src/BrowserAnimation.cpp        | 40 ++++++-------
+ UnrealEd/Src/BrowserLIPSinc.cpp          | 50 ++++++++--------
+ UnrealEd/Src/BuildPropSheet.cpp          | 46 +++++++--------
+ UnrealEd/Src/DlgArray.h                  |  4 +-
+ UnrealEd/Src/DlgTexProp.cpp              | 16 +++---
+ UnrealEd/Src/EmitterWizard.cpp           | 10 ++--
+ UnrealEd/Src/ParticleEditor.cpp          |  8 +--
+ UnrealEd/Src/ParticleEditorTab.cpp       |  2 +-
+ UnrealEd/Src/ParticleEditorToolLabel.cpp |  2 +-
+ UnrealEd/Src/ParticleEditorTools.cpp     | 68 +++++++++++-----------
+ UnrealEd/Src/SurfacePropSheet.cpp        | 54 +++++++++---------
+ 51 files changed, 369 insertions(+), 364 deletions(-)
 
 diff --git a/Core/Inc/UnObjBas.h b/Core/Inc/UnObjBas.h
 index 4938726..db72e5b 100644

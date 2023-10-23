@@ -1,4 +1,4 @@
-From 2d959fb8bed9cdccc51f5648eaa96593a4866838 Mon Sep 17 00:00:00 2001
+From eabc26289e784c6eef82c687853b86955283aff4 Mon Sep 17 00:00:00 2001
 From: Alde Rojas <hello@alde.dev>
 Date: Wed, 27 Sep 2023 18:30:49 -0500
 Subject: [PATCH] Fix high CPU usage at lower tickrate/framerate
@@ -60,5 +60,5 @@ index 86306f6..286bc11 100644
  	}
  	unguard;
 -- 
-2.42.0.windows.2
+2.31.1.windows.1
 

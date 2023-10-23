@@ -1,4 +1,4 @@
-From 7c6f83f68a52af18cf9362db76d4d85b06b8bc0e Mon Sep 17 00:00:00 2001
+From 9afb35f57cdfe99cf87c9eaa73f09268314a98b5 Mon Sep 17 00:00:00 2001
 From: Aldehir Rojas <hello@aldehir.com>
 Date: Sun, 1 Oct 2023 06:50:59 -0500
 Subject: [PATCH] Support building with meson

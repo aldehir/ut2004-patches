@@ -1,4 +1,4 @@
-From 22cb9cdc78bb382b895cefff60ab602d43d082b7 Mon Sep 17 00:00:00 2001
+From 846b495b35aae68fec987380225be1ae247e3329 Mon Sep 17 00:00:00 2001
 From: Alde Rojas <hello@alde.dev>
 Date: Sat, 14 Oct 2023 00:31:00 -0500
 Subject: [PATCH] Fix freezing when in windowed mode

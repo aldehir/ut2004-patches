@@ -1,4 +1,4 @@
-From f7fd4548af7080d479799ee092e3975a45c86260 Mon Sep 17 00:00:00 2001
+From c66aa8d4d5c8aece809eb8b3613333ea58429297 Mon Sep 17 00:00:00 2001
 From: Alde Rojas <hello@alde.dev>
 Date: Thu, 5 Oct 2023 22:58:14 -0500
 Subject: [PATCH] Improve windowed input when using raw input mode

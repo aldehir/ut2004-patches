@@ -1,4 +1,4 @@
-From a395df44ad65de832576f0cb44854c71c316a164 Mon Sep 17 00:00:00 2001
+From e7de364108a9697018e00a974a99031f47eaf570 Mon Sep 17 00:00:00 2001
 From: Alde Rojas <hello@alde.dev>
 Date: Wed, 27 Sep 2023 02:41:14 -0500
 Subject: [PATCH] Replace use of rdtsc with QPC
@@ -119,5 +119,5 @@ index d5c371e..38c72f1 100644
  	{
  		GSecondsPerCycle = 0.000001/CpuSpeed;
 -- 
-2.42.0.windows.2
+2.31.1.windows.1
 

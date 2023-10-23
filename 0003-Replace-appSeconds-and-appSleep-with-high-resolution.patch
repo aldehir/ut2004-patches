@@ -1,4 +1,4 @@
-From 8b5591bb2302480b4186d761e5ca2ce4fc96e885 Mon Sep 17 00:00:00 2001
+From 0bb0c69d94f90786a1d7794a909716a0f5abd970 Mon Sep 17 00:00:00 2001
 From: Alde Rojas <hello@alde.dev>
 Date: Wed, 27 Sep 2023 00:05:49 -0500
 Subject: [PATCH] Replace appSeconds() and appSleep() with high resolution
@@ -148,5 +148,5 @@ index 59b793e..d5c371e 100644
  	}
  	catch( ... )
 -- 
-2.42.0.windows.2
+2.31.1.windows.1
 
