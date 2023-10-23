@@ -15,30 +15,55 @@ installation. Every release is standalone, you do not need to apply previous
 patches to fully patch your UT2004 installation.
 
 
-## Changelog
+## Features
 
-### v3369.1
+### High Resolution Timers
 
-* **Add support for framerates that require higher resolution than 1ms.**
+Higher resolution timers enable accurate framerate pacing and proper framerate
+limiting.
 
-  UT2004's original timers caused framerates to vary wildly due to their low
-  resolution. Now you can maintain any desired framerate.
+### RawInput Support
 
-* **Fix the framerate limiting algorithm.**
+The RawInput API is used for mouse input in modern games. Buffered Raw Input
+offers minimal latency when using a high polling mouse.
 
-  UT2004 performed additional operations after limiting your framerate,
-  resulting in a reported framerate less than MaxClientFrameRate. The limit is
-  now applied after those operations to provide a more stable fps.
+To enable, run the following in console:
+```
+setmouseinput rawinputbuffer
+```
 
-  NOTE: You may notice that single player no longer hits up to 1000 fps. This
-  was a misleading metric, as it only occurs when there are no OS events to
-  process. The counter now reports an accurate fps.
+To revert back to DirectInput:
+```
+setmouseinput directinput
+```
 
-* **Implement RawInput and RawInputBuffer mouse input modes.**
+### Fix for unintentional dodges
 
-  Use `setmouseinput` to set your mouse input mode to one of: `directinput`,
-  `rawinput`, or `rawinputbuffer`.
+The dodge detection code contains a bug related to floating point imprecision.
+This patch adds guard rails to prevent accidentally dodging.
 
+### DirectX 9 Support
+
+Included is the native DirectX 9 Driver with fixes for the following issues:
+* Game hangs when switching from fullscreen to windowed mode.
+* Textures that require multiple passes are not properly rendered, such as
+  UDamage (Amp).
+
+To enable, set your render device in `UT2004.ini`:
+```ini
+[Engine.Engine]
+RenderDevice=D3D9Drv.D3D9RenderDevice
+```
+
+### Increased OpenGL Refresh Rate
+
+The OpenGL driver now supports refresh rates up to 600 Hz.
+
+To enable, set your render device in `UT2004.ini`:
+```ini
+[Engine.Engine]
+RenderDevice=OpenGLDrv.OpenGLRenderDevice
+```
 
 # Building
 
