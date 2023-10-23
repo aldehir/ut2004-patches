@@ -1,0 +1,25 @@
+From 18011e6716ecf6fce3ff832d1487aa871c4b9782 Mon Sep 17 00:00:00 2001
+From: Alde Rojas <hello@alde.dev>
+Date: Thu, 19 Oct 2023 02:29:52 -0500
+Subject: [PATCH] Fix crash when launching dedicated server from game
+
+---
+ Engine/Inc/UnEngineWin.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Engine/Inc/UnEngineWin.h b/Engine/Inc/UnEngineWin.h
+index 1c2d054..93d0db5 100644
+--- a/Engine/Inc/UnEngineWin.h
++++ b/Engine/Inc/UnEngineWin.h
+@@ -990,7 +990,7 @@ inline void	CMainLoop::RunLoop(void)
+ 
+ 		for (;;)
+ 		{
+-			if ( Engine->Client->SuppressRawMessages() )
++			if ( Engine->Client && Engine->Client->SuppressRawMessages() )
+ 			{
+ 				if (!PeekMessageX(&Msg, NULL, 0, WM_INPUT-1, PM_REMOVE)
+ 					&& !PeekMessageX(&Msg, NULL, WM_INPUT+1, (UINT)-1, PM_REMOVE))
+-- 
+2.31.1.windows.1
+
