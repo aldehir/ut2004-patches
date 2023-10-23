@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 env:
-  OUTPUT_ARCHIVE: ut2004-vanilla-drivers-${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || github.sha }}.zip
+  OUTPUT_ARCHIVE: ut2004-vanilla-drivers-${{ github.sha }}.zip
 
 jobs:
   build-windows:
@@ -63,7 +63,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/v')
         with:
-          name: UT2004 Patch ${{ github.ref_name }}
-          generate_release_notes: true
+          name: UT2004 Vanilla Drivers ${{ github.sha }}
+          prerelease: true
+          generate_release_notes: false
           files: |
             ${{ env.OUTPUT_ARCHIVE }}

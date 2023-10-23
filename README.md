@@ -15,29 +15,15 @@ installation. Every release is standalone, you do not need to apply previous
 patches to fully patch your UT2004 installation.
 
 
-## Changelog
+## Vanilla Drivers
 
-### v3369.1
+This branch contains modifications to drivers and does not apply any changes
+to the engine itself.
 
-* **Add support for framerates that require higher resolution than 1ms.**
-
-  UT2004's original timers caused framerates to vary wildly due to their low
-  resolution. Now you can maintain any desired framerate.
-
-* **Fix the framerate limiting algorithm.**
-
-  UT2004 performed additional operations after limiting your framerate,
-  resulting in a reported framerate less than MaxClientFrameRate. The limit is
-  now applied after those operations to provide a more stable fps.
-
-  NOTE: You may notice that single player no longer hits up to 1000 fps. This
-  was a misleading metric, as it only occurs when there are no OS events to
-  process. The counter now reports an accurate fps.
-
-* **Implement RawInput and RawInputBuffer mouse input modes.**
-
-  Use `setmouseinput` to set your mouse input mode to one of: `directinput`,
-  `rawinput`, or `rawinputbuffer`.
+* **DirectX 9 Driver** - A native 32-bit DirectX 9 driver, with the following
+  patches:
+  * Fix when switching between fullscreen to windowed.
+  * Fix for multipass textures not properly rendering, such as UDamage (Amp).
 
 
 # Building
