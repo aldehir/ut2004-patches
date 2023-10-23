@@ -1,12 +1,7 @@
 $output = $args[0]
 $files = @(`
-  "System\Core.dll", `
-  "System\Engine.dll", `
-  "System\D3DDrv.dll", `
   "System\D3D9Drv.dll", `
-  "System\OpenGLDrv.dll", `
-  "System\WinDrv.dll", `
-  "System\UT2004.exe" `
+  "System\OpenGLDrv.dll" `
 )
 
 $args = @("a", "-tzip", $output) + $files
